@@ -3,7 +3,12 @@ use std::collections::VecDeque;
 use mirrord_protocol::{AddrInfoHint, AddrInfoInternal, RemoteResult};
 use tokio::sync::oneshot;
 
-use crate::{error::LayerError, file::HookMessageFile, tcp::HookMessageTcp, HOOK_SENDER};
+use crate::{
+    error::LayerError,
+    file::HookMessageFile,
+    tcp::{Connect, HookMessageTcp},
+    HOOK_SENDER,
+};
 
 pub(crate) type ResponseDeque<T> = VecDeque<ResponseChannel<T>>;
 
@@ -32,4 +37,5 @@ pub enum HookMessage {
     Tcp(HookMessageTcp),
     File(HookMessageFile),
     GetAddrInfoHook(GetAddrInfoHook),
+    Connect(Connect),
 }

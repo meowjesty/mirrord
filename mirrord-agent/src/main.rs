@@ -16,7 +16,7 @@ use futures::{
     SinkExt,
 };
 use mirrord_protocol::{
-    tcp::{ConnectRequest, ConnectResponse, LayerTcp},
+    tcp::{ConnectRequest, ConnectResponse, DaemonTcp, LayerTcp},
     AddrInfoHint, AddrInfoInternal, ClientMessage, DaemonCodec, DaemonMessage, GetAddrInfoRequest,
     GetEnvVarsRequest, RemoteResult, ResponseError,
 };
@@ -206,8 +206,8 @@ impl OutgoingTcpHandler {
             set_namespace(namespace).unwrap();
         }
 
-        let mut agent_remote_streams: HashMap<i32, TcpStream> = HashMap::with_capacity(4);
-        let mut layer_agent_streams: HashMap<i32, TcpStream> = HashMap::with_capacity(4);
+        let mut agent_remote_streams: HashMap<SocketAddr, TcpStream> = HashMap::with_capacity(4);
+        let mut layer_agent_streams: HashMap<SocketAddr, TcpStream> = HashMap::with_capacity(4);
         let mut read_buffer = vec![0; 1500];
 
         loop {
@@ -217,9 +217,6 @@ impl OutgoingTcpHandler {
 
                 match connect_result {
                     Ok(tcp_stream) => {
-                        let fd = tcp_stream.as_raw_fd();
-                        agent_remote_streams.insert(fd, tcp_stream);
-
                         let bind_result: RemoteResult<_> =
                             TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))
                                 .await
@@ -242,8 +239,8 @@ impl OutgoingTcpHandler {
 
                                         match accept_result {
                                             Ok((stream, address)) => {
-                                                let fd = stream.as_raw_fd();
-                                                layer_agent_streams.insert(fd, stream);
+                                                agent_remote_streams.insert(address, tcp_stream);
+                                                layer_agent_streams.insert(address, stream);
                                             }
                                             Err(fail) => {
                                                 response_channel_tx.send(Err(fail)).await;
@@ -267,33 +264,62 @@ impl OutgoingTcpHandler {
             }
 
             for (_, layer_agent_stream) in layer_agent_streams.iter_mut() {
+                let address = layer_agent_stream.local_addr().unwrap();
                 let read = layer_agent_stream.read(&mut read_buffer).await;
                 debug!(
                     "OutgoingTcpHandler::run -> layer_agent_stream::read {:#?}",
                     read
                 );
-                // TODO(alex) [high] 2022-07-18: Gotta send the message we just read to the remote
-                // stream, this means we need an association of `layer` to `remote` (the `fd` alone
-                // as the key for the map is not enough).
+
+                if let Some(agent_remote_stream) = agent_remote_streams.get_mut(&address) {
+                    let write = agent_remote_stream
+                        .write_all(&read_buffer[..read.unwrap()])
+                        .await;
+
+                    debug!(
+                        "OutgoingTcpHandler::run -> agent_remote_stream::write {:#?}",
+                        write
+                    );
+                }
             }
 
             for (_, agent_remote_stream) in agent_remote_streams.iter_mut() {
+                let address = agent_remote_stream.local_addr().unwrap();
                 let read = agent_remote_stream.read(&mut read_buffer).await;
                 debug!(
                     "OutgoingTcpHandler::run -> agent_remote_stream::read {:#?}",
                     read
                 );
+
+                if let Some(layer_agent_stream) = layer_agent_streams.get_mut(&address) {
+                    let write = layer_agent_stream
+                        .write_all(&read_buffer[..read.unwrap()])
+                        .await;
+
+                    debug!(
+                        "OutgoingTcpHandler::run -> layer_agent_stream::write {:#?}",
+                        write
+                    );
+                }
             }
         }
     }
 
-    async fn connect(&mut self, request: ConnectRequest) -> Result<(), AgentError> {
+    async fn connect(
+        &mut self,
+        request: ConnectRequest,
+    ) -> Result<RemoteResult<ConnectResponse>, AgentError> {
+        trace!("OutgoingTcpHandler::connect -> request {:#?}", request);
+
         self.request_channel_tx.send(request).await?;
 
-        // TODO(alex) [high] 2202-07-18: Receive the address that we're going to send back to layer.
-        self.response_channel_rx.recv();
+        let connect_response = self
+            .response_channel_rx
+            .recv()
+            .await
+            .ok_or(AgentError::EmptyRecv)?;
 
-        Ok(todo!())
+        Ok(connect_response)
     }
 }
 
@@ -411,6 +437,14 @@ impl ClientConnectionHandler {
             ClientMessage::Close => {
                 return Ok(false);
             }
+            ClientMessage::ConnectRequest(request) => {
+                // TODO(alex) [high] 2202-07-18: Implement this.
+                let connect_response = self.outgoing_tcp_handler.connect(request).await?;
+
+                self.stream
+                    .send(DaemonMessage::ConnectResponse(connect_response))
+                    .await?;
+            }
         }
         Ok(true)
     }
@@ -424,11 +458,6 @@ impl ClientConnectionHandler {
                     .await
             }
             LayerTcp::PortUnsubscribe(port) => self.tcp_sniffer_api.port_unsubscribe(port).await,
-            LayerTcp::ConnectRequest(request) => {
-                // TODO(alex) [high] 2202-07-18: Implement this.
-                self.outgoing_tcp_handler.connect(request).await?;
-                todo!()
-            }
         }
     }
 }

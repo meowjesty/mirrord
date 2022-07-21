@@ -10,7 +10,7 @@ use bincode::{error::DecodeError, Decode, Encode};
 use bytes::{Buf, BufMut, BytesMut};
 
 use crate::{
-    tcp::{DaemonTcp, LayerTcp},
+    tcp::{ConnectRequest, ConnectResponse, DaemonTcp, LayerTcp},
     ResponseError,
 };
 
@@ -159,6 +159,7 @@ pub struct GetAddrInfoRequest {
 pub enum ClientMessage {
     Close,
     Tcp(LayerTcp),
+    ConnectRequest(ConnectRequest),
     FileRequest(FileRequest),
     GetEnvVarsRequest(GetEnvVarsRequest),
     Ping,
@@ -262,6 +263,7 @@ pub enum DaemonMessage {
     Tcp(DaemonTcp),
     LogMessage(LogMessage),
     File(FileResponse),
+    ConnectResponse(RemoteResult<ConnectResponse>),
     Pong,
     GetEnvVarsResponse(RemoteResult<HashMap<String, String>>),
     GetAddrInfoResponse(RemoteResult<Vec<AddrInfoInternal>>),

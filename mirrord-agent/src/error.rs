@@ -26,6 +26,9 @@ pub enum AgentError {
     #[error("ConnectRequest sender failed with `{0}`")]
     SendConnectRequest(#[from] tokio::sync::mpsc::error::SendError<ConnectRequest>),
 
+    #[error("Empty")]
+    EmptyRecv,
+
     #[error("task::Join failed with `{0}`")]
     Join(#[from] tokio::task::JoinError),
 

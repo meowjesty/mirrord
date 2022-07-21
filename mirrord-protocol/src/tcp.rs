@@ -39,7 +39,6 @@ pub enum LayerTcp {
     PortSubscribe(Port),
     ConnectionUnsubscribe(ConnectionID),
     PortUnsubscribe(Port),
-    ConnectRequest(ConnectRequest),
 }
 
 /// Messages related to Tcp handler from server.
@@ -48,5 +47,4 @@ pub enum DaemonTcp {
     NewConnection(NewTcpConnection),
     Data(TcpData),
     Close(TcpClose),
-    ConnectResponse(RemoteResult<ConnectResponse>),
 }

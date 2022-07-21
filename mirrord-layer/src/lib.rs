@@ -8,7 +8,7 @@ use std::{
     sync::{LazyLock, OnceLock},
 };
 
-use common::{GetAddrInfoHook, ResponseChannel};
+use common::{GetAddrInfoHook, ResponseChannel, ResponseDeque};
 use ctor::ctor;
 use envconfig::Envconfig;
 use error::LayerError;
@@ -18,11 +18,12 @@ use futures::{SinkExt, StreamExt};
 use kube::api::Portforwarder;
 use libc::c_int;
 use mirrord_protocol::{
+    tcp::{ConnectRequest, ConnectResponse},
     AddrInfoInternal, ClientCodec, ClientMessage, DaemonMessage, EnvVars, GetAddrInfoRequest,
     GetEnvVarsRequest,
 };
 use socket::SOCKETS;
-use tcp::TcpHandler;
+use tcp::{Connect, TcpHandler};
 use tcp_mirror::TcpMirrorHandler;
 use tokio::{
     runtime::Runtime,
@@ -97,6 +98,7 @@ where
     // Stores a list of `oneshot`s that communicates with the hook side (send a message from -layer
     // to -agent, and when we receive a message from -agent to -layer).
     getaddrinfo_handler_queue: VecDeque<ResponseChannel<Vec<AddrInfoInternal>>>,
+    connect_queue: ResponseDeque<ConnectResponse>,
 }
 
 impl<T> Layer<T>
@@ -110,6 +112,7 @@ where
             tcp_mirror_handler: TcpMirrorHandler::default(),
             file_handler: FileHandler::default(),
             getaddrinfo_handler_queue: VecDeque::new(),
+            connect_queue: ResponseDeque::with_capacity(4),
         }
     }
 
@@ -144,6 +147,18 @@ where
                 });
 
                 self.codec.send(request).await.unwrap();
+            }
+            HookMessage::Connect(Connect {
+                remote_address,
+                channel_tx,
+            }) => {
+                self.connect_queue.push_back(channel_tx);
+                self.codec
+                    .send(ClientMessage::ConnectRequest(ConnectRequest {
+                        remote_address,
+                    }))
+                    .await
+                    .unwrap();
             }
         }
     }
@@ -181,6 +196,12 @@ where
             }
             DaemonMessage::Close => todo!(),
             DaemonMessage::LogMessage(_) => todo!(),
+            DaemonMessage::ConnectResponse(tcp_connect) => self
+                .connect_queue
+                .pop_front()
+                .ok_or(LayerError::SendErrorTcpResponse)?
+                .send(tcp_connect)
+                .map_err(|_| LayerError::SendErrorTcpResponse),
         }
     }
 }

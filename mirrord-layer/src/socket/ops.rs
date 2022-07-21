@@ -1,18 +1,22 @@
 use std::{
     ffi::CString,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    os::unix::{io::RawFd, prelude::FromRawFd},
+    os::unix::{
+        io::RawFd,
+        prelude::{FromRawFd, IntoRawFd},
+    },
     ptr,
     sync::Arc,
+    thread,
 };
 
 use dns_lookup::AddrInfo;
 use errno::{errno, set_errno, Errno};
 use libc::{c_int, sockaddr, socklen_t};
-use mirrord_protocol::tcp::ConnectResponse;
+use mirrord_protocol::{tcp::ConnectResponse, RemoteResult};
 use os_socketaddr::OsSocketAddr;
 use socket2::SockAddr;
-use tokio::sync::oneshot;
+use tokio::{sync::oneshot, task};
 use tracing::{debug, error, trace, warn};
 
 use super::*;
@@ -20,7 +24,7 @@ use crate::{
     common::{blocking_send_hook_message, GetAddrInfoHook, HookMessage},
     error::LayerError,
     tcp::{Connect, HookMessageTcp, Listen},
-    HOOK_SENDER,
+    HOOK_SENDER, RUNTIME,
 };
 
 /// Create the socket, add it to SOCKETS if successful and matching protocol and domain (Tcpv4/v6)
@@ -197,6 +201,14 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
         remote_address
     );
 
+    if remote_address.port() == 61337 {
+        let socket = unsafe { socket2::Socket::from_raw_fd(sockfd) };
+        socket.connect(&remote_address.into())?;
+
+        socket.into_raw_fd();
+        return Ok(());
+    }
+
     let mut mirror_socket = {
         SOCKETS
             .lock()?
@@ -206,34 +218,14 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
 
     let socket = unsafe { socket2::Socket::from_raw_fd(sockfd) };
 
-    if let SocketState::Bound(bound) = mirror_socket.state {
-        let Bound {
-            address: bound_address,
-        } = bound;
-
-        let connected = Connected {
-            remote_address,
-            bound_address,
-        };
-
+    if let SocketState::Initialized = mirror_socket.state {
+        debug!("connect -> socket is initialized");
         // TODO(alex) [high] 2022-07-15: Implementation plan
         // 1. Send connect message to `agent`;
         // 2. `agent` creates a socket to handle this `layer`->`agent` connection;
         // 3. `agent` creates another socket that calls `connect` to the `remote_address`;
         // 4. Calls to read on this socket in `agent` will contain data the we log, and then
         // write to `remote_address`;
-        let unbound_local_address = (mirror_socket.domain == libc::AF_INET)
-            .then(|| SockAddr::from(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)))
-            .or_else(|| {
-                Some(SockAddr::from(SocketAddr::new(
-                    IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-                    0,
-                )))
-            })
-            .ok_or(LayerError::UnsupportedDomain(mirror_socket.domain))?;
-
-        socket.bind(&unbound_local_address)?;
-
         let (channel_tx, channel_rx) = oneshot::channel();
 
         let connect = Connect {
@@ -241,33 +233,51 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
             channel_tx,
         };
 
-        let connect_hook = HookMessageTcp::Connect(connect);
-        blocking_send_hook_message(HookMessage::Tcp(connect_hook))?;
+        let result: Result<_, LayerError> = thread::spawn(move || {
+            blocking_send_hook_message(HookMessage::Connect(connect))?;
+            debug!("connect -> sent hook");
 
-        Arc::get_mut(&mut mirror_socket).unwrap().state = SocketState::Connected(connected);
+            let ConnectResponse { intercept_address } = channel_rx.blocking_recv()??;
+            debug!("connect -> intercept_address {:#?}", intercept_address);
 
-        // We need to find out what's the port we bound to, that'll be used by `poll_agent` to
-        // connect to.
-        let local_address = socket.local_addr()?;
+            // TODO(alex) [high] 2202-07-16:
+            // // 1. We send a hook message to the agent;
+            // 2. agent will create a `TcpListener` waiting for a connection on `intercept_address`;
+            // 3. agent sends back to layer this address;
+            // 4. layer connects to this intercepted address;
+            //
+            // Need a thread that will hold all these intercepted addresses in agent, so we can use
+            // `set_namespace` in there.
+            // let intercept_address = hook_channel_rx.recv()?;
+            socket.connect(&intercept_address.into())?;
 
-        let ConnectResponse { intercept_address } = channel_rx.blocking_recv()??;
+            let local_address = socket.local_addr()?.as_socket().unwrap();
+            debug!("connect -> local_address {:#?}", local_address);
 
-        // TODO(alex) [high] 2202-07-16:
-        // // 1. We send a hook message to the agent;
-        // 2. agent will create a `TcpListener` waiting for a connection on `intercept_address`;
-        // 3. agent sends back to layer this address;
-        // 4. layer connects to this intercepted address;
-        //
-        // Need a thread that will hold all these intercepted addresses in agent, so we can use
-        // `set_namespace` in there.
-        // let intercept_address = hook_channel_rx.recv()?;
-        socket.connect(&intercept_address.into())?;
+            let connected = Connected {
+                remote_address,
+                local_address,
+            };
 
-        let mut sockets = SOCKETS.lock().unwrap();
-        sockets.insert(sockfd, mirror_socket);
+            socket.into_raw_fd();
+            Arc::get_mut(&mut mirror_socket).unwrap().state = SocketState::Connected(connected);
 
-        Ok(())
+            let mut sockets = SOCKETS.lock().unwrap();
+            sockets.insert(sockfd, mirror_socket);
+            debug!("connect -> SOCKETS {:#?}", sockets);
+
+            Ok(())
+        })
+        .join()
+        .unwrap();
+
+        debug!("connect -> done {:#?}", result);
+
+        result
     } else {
+        // TODO(alex) [high] 2202-07-18: Ended up entering here on curl. We don't call `bind` on
+        // this `sockfd`, so it never gets put into `bound` state, gotta check only for
+        // `Initialized`.
         todo!()
     }
 }
@@ -317,7 +327,7 @@ pub(super) fn getsockname(
         let sockets = SOCKETS.lock().unwrap();
         match sockets.get(&sockfd) {
             Some(socket) => match &socket.state {
-                SocketState::Connected(connected) => connected.bound_address,
+                SocketState::Connected(connected) => connected.local_address,
                 SocketState::Bound(bound) => bound.address,
                 SocketState::Listening(bound) => bound.address,
                 _ => {
@@ -375,7 +385,7 @@ pub(super) fn accept(
         type_,
         state: SocketState::Connected(Connected {
             remote_address,
-            bound_address: local_address,
+            local_address,
         }),
     };
     fill_address(address, address_len, remote_address);

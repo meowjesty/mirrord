@@ -1,9 +1,6 @@
 use std::{
-    ffi::CString,
-    fs::{File, OpenOptions},
-    io::{prelude::*, Result, SeekFrom},
-    mem::size_of,
-    net::{TcpListener, TcpStream},
+    io::{prelude::*, Result},
+    net::TcpStream,
 };
 
 fn debug_request() {

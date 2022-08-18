@@ -22,6 +22,8 @@ pub(crate) static SOCKETS: LazyLock<Mutex<HashMap<RawFd, Arc<MirrorSocket>>>> =
 pub static CONNECTION_QUEUE: LazyLock<Mutex<ConnectionQueue>> =
     LazyLock::new(|| Mutex::new(ConnectionQueue::default()));
 
+pub(crate) type ConnectionId = i32;
+
 /// Struct sent over the socket once created to pass metadata to the hook
 #[derive(Debug)]
 pub struct SocketInformation {
@@ -63,6 +65,7 @@ trait GetPeerName {
 
 #[derive(Debug)]
 pub struct Connected {
+    connection_id: Option<ConnectionId>,
     /// Remote address we're connected to
     remote_address: SocketAddr,
     /// Local address it's connected from

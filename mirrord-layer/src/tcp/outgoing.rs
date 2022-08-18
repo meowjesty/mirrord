@@ -6,13 +6,7 @@ use std::{
 };
 
 use futures::SinkExt;
-use mirrord_protocol::{
-    tcp::outgoing::{
-        ConnectRequest, ConnectResponse, ReadResponse, TcpOutgoingRequest, TcpOutgoingResponse,
-        WriteRequest, WriteResponse,
-    },
-    ClientCodec, ClientMessage,
-};
+use mirrord_protocol::{tcp::outgoing::*, ClientCodec, ClientMessage};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -32,24 +26,29 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct MirrorConnect {
     pub(crate) mirror_address: SocketAddr,
+    pub(crate) connection_id: ConnectionId,
 }
 
 #[derive(Debug)]
 pub(crate) struct Connect {
     pub(crate) remote_address: SocketAddr,
     pub(crate) channel_tx: ResponseChannel<MirrorConnect>,
-    pub(crate) user_fd: i32,
 }
 
 pub(crate) struct Write {
-    pub(crate) id: i32,
+    pub(crate) connection_id: ConnectionId,
     pub(crate) bytes: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Close {
+    pub(crate) connection_id: ConnectionId,
 }
 
 impl fmt::Debug for Write {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Write")
-            .field("id", &self.id)
+            .field("connection_id", &self.connection_id)
             .field("bytes (length)", &self.bytes.len())
             .finish()
     }
@@ -59,11 +58,12 @@ impl fmt::Debug for Write {
 pub(crate) enum TcpOutgoing {
     Connect(Connect),
     Write(Write),
+    Close(Close),
 }
 
 #[derive(Debug)]
 pub(crate) struct TcpOutgoingHandler {
-    mirrors: HashMap<i32, ConnectionMirror>,
+    mirrors: HashMap<ConnectionId, ConnectionMirror>,
     connect_queue: ResponseDeque<MirrorConnect>,
 }
 
@@ -94,10 +94,10 @@ impl Default for TcpOutgoingHandler {
 impl TcpOutgoingHandler {
     /// TODO(alex) [low] 2022-08-09: Document this function.
     async fn interceptor_task(
-        id: i32,
+        connection_id: ConnectionId,
         mut mirror_stream: TcpStream,
         remote_stream: Receiver<Vec<u8>>,
-    ) {
+    ) -> Result<(), LayerError> {
         let mut remote_stream = ReceiverStream::new(remote_stream);
         let mut buffer = vec![0; 1024];
 
@@ -114,29 +114,29 @@ impl TcpOutgoingHandler {
                         },
                         Err(fail) => {
                             error!("Failed reading mirror_stream with {:#?}", fail);
-                            break;
+
+                            return Err(fail.into());
                         }
                         Ok(read_amount) if read_amount == 0 => {
                             warn!("interceptor_task -> exiting due to local stream closed!");
-                            break;
+
+                            return Ok(());
                         },
                         Ok(read_amount) => {
-                            // TODO(alex) [mid] 2022-08-09: Use hook channel or create some other
-                            // new channel just to handle these types of messages?
-
                             // Sends the message that the user wrote to our interceptor socket to
                             // be handled on the `agent`, where it'll be forwarded to the remote.
-                            let write = Write { id, bytes: buffer[..read_amount].to_vec() };
-                            let outgoing_data = TcpOutgoing::Write(write);
+                            let write = Write { connection_id, bytes: buffer[..read_amount].to_vec() };
+                            let write_hook = TcpOutgoing::Write(write);
 
                             // TODO(alex) [mid] 2022-08-09: Must handle a response from `agent`
                             // mostly for the case where `send` failed sending data to remote.
                             // Need a `written_amount` or error type of response to mimick how
                             // proper `io` works.
-                            if let Err(fail) = send_hook_message(HookMessage::TcpOutgoing(outgoing_data)).await {
-                                error!("Failed sending write message with {:#?}!", fail);
-                                break;
-                            }
+                            send_hook_message(HookMessage::TcpOutgoing(write_hook))
+                                .await
+                                .inspect_err(|fail| {
+                                    error!("Failed sending write message with {:#?}!", fail)
+                            })?;
                         }
                     }
                 },
@@ -146,14 +146,15 @@ impl TcpOutgoingHandler {
                             // Writes the data sent by `agent` (that came from the actual remote
                             // stream) to our interceptor socket. When the user tries to read the
                             // remote data, this'll be what they receive.
-                            if let Err(fail) = mirror_stream.write_all(&bytes).await {
-                                error!("Failed writing to mirror_stream with {:#?}!", fail);
-                                break;
-                            }
+                            mirror_stream.write_all(&bytes).await
+                                .inspect_err(|fail| {
+                                    error!("Failed writing to mirror_stream with {:#?}!", fail)
+                            })?;
                         },
                         None => {
                             warn!("tcp_tunnel -> exiting due to remote stream closed!");
-                            break;
+
+                            return Ok(());
                         }
                     }
                 },
@@ -175,8 +176,6 @@ impl TcpOutgoingHandler {
             TcpOutgoing::Connect(Connect {
                 remote_address,
                 channel_tx,
-                // TODO(alex) [mid] 2022-07-20: Has to be socket address, rather than fd?
-                user_fd,
             }) => {
                 trace!("Connect -> remote_address {:#?}", remote_address,);
 
@@ -184,19 +183,35 @@ impl TcpOutgoingHandler {
 
                 Ok(codec
                     .send(ClientMessage::TcpOutgoing(TcpOutgoingRequest::Connect(
-                        ConnectRequest {
-                            user_fd,
-                            remote_address,
+                        ConnectRequest { remote_address },
+                    )))
+                    .await?)
+            }
+            TcpOutgoing::Write(Write {
+                connection_id,
+                bytes,
+            }) => {
+                trace!(
+                    "Write -> connection_id {:#?} | bytes (len) {:#?}",
+                    connection_id,
+                    bytes.len(),
+                );
+
+                Ok(codec
+                    .send(ClientMessage::TcpOutgoing(TcpOutgoingRequest::Write(
+                        WriteRequest {
+                            connection_id,
+                            bytes,
                         },
                     )))
                     .await?)
             }
-            TcpOutgoing::Write(Write { id, bytes }) => {
-                trace!("Write -> id {:#?} | bytes (len) {:#?}", id, bytes.len(),);
+            TcpOutgoing::Close(Close { connection_id }) => {
+                trace!("Close -> connection_id {:#?}", connection_id);
 
                 Ok(codec
-                    .send(ClientMessage::TcpOutgoing(TcpOutgoingRequest::Write(
-                        WriteRequest { id, bytes },
+                    .send(ClientMessage::TcpOutgoing(TcpOutgoingRequest::Close(
+                        CloseRequest { connection_id },
                     )))
                     .await?)
             }
@@ -214,18 +229,12 @@ impl TcpOutgoingHandler {
                 trace!("Connect -> connect {:#?}", connect);
 
                 let ConnectResponse {
-                    user_fd,
+                    connection_id,
                     remote_address,
                 } = connect?;
 
-                debug!("handle_daemon_message -> usef_fd {:#?}", user_fd);
-
                 IS_INTERNAL_CALL.store(true, Ordering::Release);
 
-                debug!("handle_daemon_message -> before binding");
-                // TODO(alex) [mid] 2022-08-08: This must match the `family` of the original
-                // request, meaning that, if the user tried to connect with Ipv4, this should be
-                // an Ipv4 (same for Ipv6).
                 let mirror_listener = match remote_address {
                     SocketAddr::V4(_) => {
                         TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))
@@ -244,7 +253,10 @@ impl TcpOutgoingHandler {
 
                 {
                     let mirror_address = mirror_listener.local_addr()?;
-                    let mirror_connect = MirrorConnect { mirror_address };
+                    let mirror_connect = MirrorConnect {
+                        connection_id,
+                        mirror_address,
+                    };
 
                     let _ = self
                         .connect_queue
@@ -264,11 +276,11 @@ impl TcpOutgoingHandler {
 
                 let (sender, receiver) = channel::<Vec<u8>>(1000);
 
-                // TODO(alex) [high] 2022-08-08: Should be very similar to `handle_new_connection`.
-                self.mirrors.insert(user_fd, ConnectionMirror { sender });
+                self.mirrors
+                    .insert(connection_id, ConnectionMirror { sender });
 
                 task::spawn(TcpOutgoingHandler::interceptor_task(
-                    user_fd,
+                    connection_id,
                     mirror_stream,
                     receiver,
                 ));
@@ -278,12 +290,15 @@ impl TcpOutgoingHandler {
             TcpOutgoingResponse::Read(read) => {
                 trace!("Read -> read {:?}", read);
                 // `agent` read something from remote, so we write it to the `user`.
-                let ReadResponse { id, bytes } = read?;
+                let ReadResponse {
+                    connection_id,
+                    bytes,
+                } = read?;
 
                 let sender = self
                     .mirrors
-                    .get_mut(&id)
-                    .ok_or(LayerError::LocalFDNotFound(id))
+                    .get_mut(&connection_id)
+                    .ok_or(LayerError::OutgoingConnectionIdNotFound(connection_id))
                     .map(|mirror| &mut mirror.sender)?;
 
                 Ok(sender.send(bytes).await?)
@@ -291,11 +306,7 @@ impl TcpOutgoingHandler {
             TcpOutgoingResponse::Write(write) => {
                 trace!("Write -> write {:?}", write);
 
-                let WriteResponse { id } = write?;
-                // TODO(alex) [mid] 2022-07-20: Receive message from agent.
-                // ADD(alex) [mid] 2022-08-09: Should be very similar to `Read`, but `sender` works
-                // with `Vec<u8>`, so maybe wrapping it in a `Result<Vec<u8>, Error>` would make
-                // more sense, and enable this idea.
+                let WriteResponse { connection_id } = write?;
 
                 Ok(())
             }

@@ -4,32 +4,24 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::unix::io::RawFd,
     ptr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use dns_lookup::AddrInfo;
 use libc::{c_int, sockaddr, socklen_t};
-use socket2::{Domain, SockAddr, Type};
+use socket2::SockAddr;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 
 use super::{hooks::*, *};
 use crate::{
     common::{blocking_send_hook_message, GetAddrInfoHook, HookMessage},
     error::LayerError,
     tcp::{
-        outgoing::{Connect, MirrorConnect, TcpOutgoing},
+        outgoing::{self, Connect, MirrorConnect, TcpOutgoing},
         HookMessageTcp, Listen,
     },
 };
-
-// TODO(alex) [high] 2022-07-21: Separate sockets into 2 compartments, listen sockets go into a
-// thread for listening, connect sockets into another thread. Try to get rid of the overall global
-// theme around sockets.
-// Worth it?
 
 pub(crate) static IS_INTERNAL_CALL: AtomicBool = AtomicBool::new(false);
 
@@ -220,14 +212,10 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
                 "connect -> SocketState::Initialized {:#?}",
                 user_socket_info
             );
-            // TODO(alex) [high] 2022-07-15: Implementation plan
-            // 4. Calls to read on this socket in `agent` will contain data that we log, and then
-            // write to `remote_address`;
 
             let (mirror_tx, mirror_rx) = oneshot::channel();
 
             let connect = Connect {
-                user_fd: sockfd,
                 remote_address,
                 channel_tx: mirror_tx,
             };
@@ -237,7 +225,10 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
             let connect_hook = TcpOutgoing::Connect(connect);
 
             blocking_send_hook_message(HookMessage::TcpOutgoing(connect_hook))?;
-            let MirrorConnect { mirror_address } = mirror_rx.blocking_recv()??;
+            let MirrorConnect {
+                connection_id,
+                mirror_address,
+            } = mirror_rx.blocking_recv()??;
 
             let connect_to = SockAddr::from(mirror_address);
             debug!(
@@ -245,11 +236,10 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
                 connect_to, mirror_address
             );
 
-            // TODO(alex) [high] 2022-08-08: Connection between 2 local sockets is created, it just
-            // doesn't do anything.
             let connect_result =
                 unsafe { FN_CONNECT(sockfd, connect_to.as_ptr(), connect_to.len()) };
             let err_code = errno::errno().0;
+
             if connect_result == -1 && err_code != libc::EINPROGRESS && err_code != libc::EINTR {
                 error!(
                     "connect -> Failed call to libc::connect with {:#?} errno is {:#?}",
@@ -260,6 +250,7 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
             }
 
             let connected = Connected {
+                connection_id: Some(connection_id),
                 remote_address,
                 mirror_address,
             };
@@ -267,6 +258,10 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<(), L
             debug!("connect -> connected {:#?}", connected);
 
             Arc::get_mut(&mut user_socket_info).unwrap().state = SocketState::Connected(connected);
+
+            SOCKETS.lock()?.insert(sockfd, user_socket_info);
+
+            debug!("connect -> SOCKETS {:#?}", SOCKETS);
 
             Ok::<(), LayerError>(())
         }
@@ -391,6 +386,7 @@ pub(super) fn accept(
         protocol,
         type_,
         state: SocketState::Connected(Connected {
+            connection_id: None,
             remote_address,
             mirror_address: local_address,
         }),
@@ -487,7 +483,6 @@ pub(super) fn getaddrinfo(
                 ai_socktype,
                 ai_protocol,
                 ai_addrlen,
-                // TODO(alex) [high] 2022-08-16: Box this, otherwise we lose it.
                 ai_addr,
                 ai_canonname,
                 ai_next: ptr::null_mut(),
@@ -509,8 +504,26 @@ pub(super) fn getaddrinfo(
     result
 }
 
-pub(crate) fn close(fd: usize) -> Result<(), LayerError> {
-    trace!("close -> fd {:#?}", fd);
+pub(crate) fn close(fd: RawFd, mirror_socket: Arc<MirrorSocket>) -> Result<(), LayerError> {
+    trace!("close -> fd {:#?} | mirror_socket {:#?}", fd, mirror_socket);
 
-    todo!()
+    match &mirror_socket.state {
+        SocketState::Listening(listen) => {
+            todo!()
+        }
+        SocketState::Connected(Connected {
+            connection_id: Some(connection_id),
+            remote_address,
+            mirror_address,
+        }) => {
+            let hook = TcpOutgoing::Close(outgoing::Close {
+                connection_id: *connection_id,
+            });
+
+            blocking_send_hook_message(HookMessage::TcpOutgoing(hook))?;
+
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }

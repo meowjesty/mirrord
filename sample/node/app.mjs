@@ -47,10 +47,9 @@ function debugDns() {
 
 // debug_file_ops();
 // debugDns();
-// debugRequest(null);
-// debugRequest(null);
+debugRequest(null);
 // debugConnect();
-debugListen();
+// debugListen();
 
 function debugConnect() {
   let options = { readable: true, writable: true };
@@ -120,7 +119,7 @@ function debugRequest(listening) {
     });
 
     socket.on("error", (fail) => {
-      console.err(">> socket error -> fail ", fail);
+      console.error(">> socket error -> fail ", fail);
     });
   });
 

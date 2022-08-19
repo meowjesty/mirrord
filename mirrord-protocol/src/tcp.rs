@@ -2,13 +2,14 @@ use std::{fmt, net::IpAddr};
 
 use bincode::{Decode, Encode};
 
-use crate::{ConnectionID, Port};
+use self::outgoing::ConnectResponse;
+use crate::{ConnectionId, Port};
 
 pub mod outgoing;
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct NewTcpConnection {
-    pub connection_id: ConnectionID,
+    pub connection_id: ConnectionId,
     pub address: IpAddr,
     pub destination_port: Port,
     pub source_port: Port,
@@ -16,7 +17,7 @@ pub struct NewTcpConnection {
 
 #[derive(Encode, Decode, PartialEq, Eq, Clone)]
 pub struct TcpData {
-    pub connection_id: ConnectionID,
+    pub connection_id: ConnectionId,
     pub bytes: Vec<u8>,
 }
 
@@ -31,14 +32,14 @@ impl fmt::Debug for TcpData {
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct TcpClose {
-    pub connection_id: ConnectionID,
+    pub connection_id: ConnectionId,
 }
 
 /// Messages related to Tcp handler from client.
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum LayerTcp {
     PortSubscribe(Port),
-    ConnectionUnsubscribe(ConnectionID),
+    ConnectionUnsubscribe(ConnectionId),
     PortUnsubscribe(Port),
 }
 
@@ -46,6 +47,7 @@ pub enum LayerTcp {
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum DaemonTcp {
     NewConnection(NewTcpConnection),
+    ConnectResponse(ConnectResponse),
     Data(TcpData),
     Close(TcpClose),
     /// Used to notify the subscription occured, needed for e2e tests to remove sleeps and

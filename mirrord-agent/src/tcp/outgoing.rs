@@ -1,14 +1,23 @@
 use core::fmt;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 
-use mirrord_protocol::{tcp::outgoing::*, RemoteResult};
+use futures::future::OptionFuture;
+use mirrord_protocol::{
+    tcp::{outgoing::*, DaemonTcp, TcpData},
+    ConnectionId, RemoteResult,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpStream,
+    },
     select,
     sync::mpsc::{self, Receiver, Sender},
     task,
 };
+use tokio_stream::{StreamExt, StreamMap};
+use tokio_util::io::ReaderStream;
 use tracing::{debug, error, trace, warn};
 
 use crate::{error::AgentError, runtime::set_namespace};
@@ -17,41 +26,136 @@ type Request = TcpOutgoingRequest;
 type Response = TcpOutgoingResponse;
 
 pub(crate) struct TcpOutgoingApi {
-    task: task::JoinHandle<Result<(), AgentError>>,
-    request_channel_tx: Sender<Request>,
-    response_channel_rx: Receiver<Response>,
-}
-
-pub struct Data {
-    connection_id: ConnectionId,
-    bytes: Vec<u8>,
-}
-
-impl fmt::Debug for Data {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Data")
-            .field("connection_id", &self.connection_id)
-            .field("bytes (length)", &self.bytes.len())
-            .finish()
-    }
+    pub(crate) daemon_tx: Sender<DaemonTcp>,
+    write_streams: HashMap<ConnectionId, OwnedWriteHalf>,
+    read_streams: StreamMap<ConnectionId, ReaderStream<OwnedReadHalf>>,
 }
 
 impl TcpOutgoingApi {
-    pub(crate) fn new(pid: Option<u64>) -> Self {
-        let (request_channel_tx, request_channel_rx) = mpsc::channel(1000);
-        let (response_channel_tx, response_channel_rx) = mpsc::channel(1000);
-
-        let task = task::spawn(Self::request_task(
-            pid,
-            request_channel_rx,
-            response_channel_tx,
-        ));
-
+    pub(crate) fn new(daemon_tx: Sender<DaemonTcp>) -> Self {
+        // TODO(alex) [high] 2022-08-19: Has to be diferent from `steal`, as we don't have a port
+        // here (the paramter: remote address).
         Self {
-            task,
-            request_channel_tx,
-            response_channel_rx,
+            daemon_tx,
+            write_streams: HashMap::default(),
+            read_streams: StreamMap::default(),
         }
+    }
+
+    pub(crate) fn start(
+        pid: Option<u64>,
+        request_rx: Receiver<Request>,
+        daemon_tx: Sender<DaemonTcp>,
+    ) {
+        std::thread::spawn(|| {
+            if let Some(pid) = pid {
+                let namespace = PathBuf::from("/proc")
+                    .join(PathBuf::from(pid.to_string()))
+                    .join(PathBuf::from("ns/net"));
+
+                set_namespace(namespace).unwrap();
+            }
+
+            let mut outgoing = TcpOutgoingApi::new(daemon_tx);
+            // TODO(alex) [high] 2022-08-19: There is no `remote_stream` here yet, as we have no
+            // connection requests.
+            outgoing.main_task(request_rx, remote_stream);
+        });
+    }
+
+    pub(crate) async fn main_task(
+        &mut self,
+        mut request_rx: Receiver<TcpOutgoingRequest>,
+        remote_stream: TcpStream,
+    ) -> Result<(), AgentError> {
+        loop {
+            select! {
+                request = request_rx.recv() => {
+                    if let Some(request) = request {
+                        self.handle_request(request).await?;
+                    } else {
+                        debug!("main_task -> request_rx closed!");
+                        break;
+                    }
+                },
+                tcp_message = self.recv_next() => {
+                    if let Some(tcp_message) = tcp_message {
+                        self.daemon_tx.send(tcp_message).await?;
+                    }
+                }
+            }
+        }
+        debug!("TCP Stealer exiting");
+        Ok(())
+    }
+
+    async fn handle_request(&mut self, request: TcpOutgoingRequest) -> Result<(), AgentError> {
+        match request {
+            TcpOutgoingRequest::Connect(ConnectRequest { remote_address }) => {
+                let response = TcpStream::connect(remote_address)
+                    .await
+                    .map_err(AgentError::from)
+                    .map(|remote_stream| {
+                        let connection_id = self
+                            .read_streams
+                            .keys()
+                            .copied()
+                            .last()
+                            .map(|last| last + 1)
+                            .unwrap_or_default();
+
+                        let (read_half, write_half) = remote_stream.into_split();
+
+                        self.read_streams
+                            .insert(connection_id, ReaderStream::new(read_half));
+                        self.write_streams.insert(connection_id, write_half);
+
+                        ConnectResponse {
+                            connection_id,
+                            remote_address,
+                        }
+                    })?;
+
+                Ok(self
+                    .daemon_tx
+                    .send(DaemonTcp::ConnectResponse(response))
+                    .await?)
+            }
+            TcpOutgoingRequest::Write(WriteRequest {
+                connection_id,
+                bytes,
+            }) => match self.write_streams.get_mut(&connection_id) {
+                Some(stream) => Ok(stream.write_all(&bytes[..]).await?),
+                None => {
+                    warn!(
+                        "handle_request -> Trying to send data to closed connection {:#?}",
+                        connection_id
+                    );
+
+                    Ok(())
+                }
+            },
+        }
+    }
+
+    /// Reads the mesage sent by the remote host, and prepares it to be sent back to layer.
+    async fn recv_next(&mut self) -> Option<DaemonTcp> {
+        let (connection_id, value) = self.read_streams.next().await?;
+
+        value
+            .inspect_err(|fail| {
+                error!(
+                    "next -> Failed `next` call for connection_id {:#?} with {:#?}!",
+                    connection_id, fail
+                )
+            })
+            .ok()
+            .map(|bytes| {
+                DaemonTcp::Data(TcpData {
+                    connection_id,
+                    bytes: bytes.to_vec(),
+                })
+            })
     }
 
     async fn interceptor_task(

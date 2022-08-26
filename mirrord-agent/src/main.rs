@@ -252,7 +252,8 @@ impl ClientConnectionHandler {
                         Err(fail) => {
                             match fail {
                                 AgentError::ReceiverClosed => if self.keep_alive {
-                                     continue;
+                                    info!("ReceiverClosed {:#?}", fail);
+                                    continue;
                                 } else {
                                     debug!("handle_look -> Client {:#?} disconnected!", self.id);
                                     break;

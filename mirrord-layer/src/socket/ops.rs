@@ -217,10 +217,11 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<()> {
         .expect("Should be set during initialization!");
 
     match user_socket_info.state {
+        // TODO(alex) [high] 2022-08-25: Requests are not working when this feature is disabled!
         SocketState::Initialized if !(*enabled_tcp_outgoing) => {
             // Just call `libc::connect`.
             trace!(
-                "connect -> SocketState::Initialized {:#?}",
+                "connect -> SocketState::Initialized (without tcp_outgoing) {:#?}",
                 user_socket_info
             );
 
@@ -242,7 +243,7 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<()> {
         SocketState::Initialized => {
             // Prepare this socket to be intercepted.
             trace!(
-                "connect -> SocketState::Initialized {:#?}",
+                "connect -> SocketState::Initialized (with tcp_outgoing) {:#?}",
                 user_socket_info
             );
             let (mirror_tx, mirror_rx) = oneshot::channel();

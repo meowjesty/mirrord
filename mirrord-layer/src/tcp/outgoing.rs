@@ -16,7 +16,7 @@ use tokio::{
     task,
 };
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     common::{ResponseChannel, ResponseDeque},
@@ -118,6 +118,9 @@ impl TcpOutgoingHandler {
         let mut remote_stream = ReceiverStream::new(remote_rx);
         let mut buffer = vec![0; 1024];
 
+        // TODO(alex) [high] 2022-08-25: Probably this causing issue, should only call close on
+        // the `close_detour` itself, we're most likely closing the sockets before it's ok to do so.
+        //
         // Sends a message to close the remote stream in `agent`, when it's
         // being closed in `layer`.
         //
@@ -132,6 +135,7 @@ impl TcpOutgoingHandler {
             }
         };
 
+        let mut keep_alive = true;
         loop {
             select! {
                 biased; // To allow local socket to be read before being closed
@@ -149,12 +153,10 @@ impl TcpOutgoingHandler {
 
                             break;
                         }
-                        Ok(read_amount) if read_amount == 0 => {
-                            info!("interceptor_task -> Stream {:#?} has no more data, closing!", connection_id);
-                            close_remote_stream(layer_tx.clone()).await;
-
-                            break;
-                        },
+                        Ok(read_amount) if read_amount == 0 && keep_alive  => {
+                            warn!("interceptor_task -> received 0 bytes!");
+                            keep_alive = false;
+                        }
                         Ok(read_amount) => {
                             // Sends the message that the user wrote to our interceptor socket to
                             // be handled on the `agent`, where it'll be forwarded to the remote.
@@ -172,6 +174,7 @@ impl TcpOutgoingHandler {
                 bytes = remote_stream.next() => {
                     match bytes {
                         Some(bytes) => {
+                            debug!("interceptor_task -> write bytes.");
                             // Writes the data sent by `agent` (that came from the actual remote
                             // stream) to our interceptor socket. When the user tries to read the
                             // remote data, this'll be what they receive.
@@ -179,13 +182,22 @@ impl TcpOutgoingHandler {
                                 error!("Failed writing to mirror_stream with {:#?}!", fail);
                                 break;
                             }
-                        },
-                        None => {
-                            warn!("interceptor_task -> exiting due to remote stream closed!");
+                        }
+                        None if !keep_alive => {
+                            warn!("interceptor_task -> no more mesages to write!");
                             break;
+                        }
+                        None => {
+                            continue;
                         }
                     }
                 },
+                else => {
+                    warn!("interceptor_task -> Closing with no messages left.");
+                    close_remote_stream(layer_tx.clone()).await;
+
+                    break;
+                }
             }
         }
 

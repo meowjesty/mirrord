@@ -82,7 +82,7 @@ function debugRequest(host) {
     res.on("data", (d) => {
       console.log(">> data -> host ", host, " | bytes ", d);
 
-      process.stdout.write(d.slice(0, 32));
+      // process.stdout.write(d.slice(0, 32));
     });
 
     res.on("close", () => {

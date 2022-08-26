@@ -11,7 +11,7 @@ use dns_lookup::AddrInfo;
 use libc::{c_int, sockaddr, socklen_t};
 use socket2::SockAddr;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, trace};
+use tracing::{error, trace};
 
 use super::{hooks::*, *};
 use crate::{
@@ -55,10 +55,6 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Result<Raw
         protocol,
         state: SocketState::default(),
     };
-    debug!(
-        "socket -> socket_fd {:#?} | new_socket {:#?}",
-        socket_fd, new_socket
-    );
 
     let mut sockets = SOCKETS.lock()?;
     sockets.insert(socket_fd, Arc::new(new_socket));
@@ -104,8 +100,6 @@ pub(super) fn bind(sockfd: c_int, address: SockAddr) -> Result<()> {
         invalid => Err(HookError::UnsupportedDomain(invalid)),
     }?;
 
-    debug!("bind -> unbound_address {:#?}", unbound_address);
-
     let bind_result = unsafe { FN_BIND(sockfd, unbound_address.as_ptr(), unbound_address.len()) };
     if bind_result != 0 {
         error!(
@@ -146,7 +140,7 @@ pub(super) fn bind(sockfd: c_int, address: SockAddr) -> Result<()> {
 /// Subscribe to the agent on the real port. Messages received from the agent on the real port will
 /// later be routed to the fake local port.
 pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Result<()> {
-    debug!("listen -> sockfd {:#?} | backlog {:#?}", sockfd, backlog);
+    trace!("listen -> sockfd {:#?} | backlog {:#?}", sockfd, backlog);
 
     let mut socket = {
         SOCKETS
@@ -340,8 +334,6 @@ pub(super) fn getpeername(
             })?
     };
 
-    debug!("getpeername -> remote_address {:#?}", remote_address);
-
     fill_address(address, address_len, remote_address)
 }
 /// Resolve the fake local address to the real local address.
@@ -364,8 +356,6 @@ pub(super) fn getsockname(
                 _ => Err(HookError::SocketInvalidState(sockfd)),
             })?
     };
-
-    debug!("getsockname -> local_address {:#?}", local_address);
 
     fill_address(address, address_len, local_address)
 }
@@ -516,8 +506,6 @@ pub(super) fn getaddrinfo(
             previous
         })
         .ok_or(HookError::DNSNoName);
-
-    info!("getaddrinfo -> result {:#?}", result);
 
     result
 }

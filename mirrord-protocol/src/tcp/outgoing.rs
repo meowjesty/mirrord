@@ -46,6 +46,16 @@ pub struct DaemonConnect {
     pub remote_address: SocketAddr,
 }
 
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub struct DaemonWrite {
+    pub connection_id: ConnectionId,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub struct DaemonClose {
+    pub connection_id: ConnectionId,
+}
+
 #[derive(Encode, Decode, PartialEq, Eq, Clone)]
 pub struct DaemonRead {
     pub connection_id: ConnectionId,
@@ -64,6 +74,7 @@ impl fmt::Debug for DaemonRead {
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum DaemonTcpOutgoing {
     Connect(RemoteResult<DaemonConnect>),
+    Write(RemoteResult<DaemonWrite>),
     Read(RemoteResult<DaemonRead>),
-    Close(ConnectionId),
+    Close(RemoteResult<DaemonClose>),
 }

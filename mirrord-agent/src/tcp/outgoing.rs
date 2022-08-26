@@ -13,7 +13,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
-use tracing::{trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::{error::AgentError, runtime::set_namespace, util::run_thread};
 
@@ -121,30 +121,34 @@ impl TcpOutgoingApi {
                                         Ok(writer) => writer
                                             .write_all(&bytes)
                                             .await
-                                            .map_err(ResponseError::from),
+                                            .map_err(ResponseError::from)
+                                            .map(|()| DaemonWrite { connection_id }),
                                         Err(fail) => Err(fail),
                                     };
 
-                                    if let Err(fail) = daemon_write {
-                                        warn!("LayerTcpOutgoing::Write -> Failed with {:#?}", fail);
-                                        writers.remove(&connection_id);
-                                        readers.remove(&connection_id);
-
-                                        let daemon_message = DaemonTcpOutgoing::Close(connection_id);
-                                        daemon_tx.send(daemon_message).await?
-                                    }
+                                    let daemon_message = DaemonTcpOutgoing::Write(daemon_write);
+                                    daemon_tx.send(daemon_message).await?
                                 }
                                 // [layer] -> [agent]
                                 // `layer` closed their interceptor stream.
-                                LayerTcpOutgoing::Close(LayerClose { ref connection_id }) => {
-                                    writers.remove(connection_id);
-                                    readers.remove(connection_id);
+                                LayerTcpOutgoing::Close(LayerClose { connection_id }) => {
+                                    trace!("Close -> connection_id {:#?} | writers {:#?} | readers {:#?}", connection_id, writers, readers);
+                                    let daemon_close = writers
+                                                .remove(&connection_id)
+                                                .inspect(|_| debug!("removed writer"))
+                                                .ok_or(ResponseError::NotFound(connection_id as usize))
+                                                .map(|_| DaemonClose { connection_id });
+
+                                    readers.remove(&connection_id);
+
+                                    let daemon_message = DaemonTcpOutgoing::Close(daemon_close);
+                                    daemon_tx.send(daemon_message).await?
                                 }
                             }
                         }
                         None => {
-                            // We have no more requests coming.
-                            warn!("interceptor_task -> no requests left!");
+                            // We have no more messages coming from `layer`.
+                            warn!("interceptor_task -> No more messages coming from `layer`!");
                             break;
                         }
                     }
@@ -153,10 +157,11 @@ impl TcpOutgoingApi {
                 // [remote] -> [agent] -> [layer] -> [user]
                 // Read the data from one of the connected remote hosts, and forward the result back
                 // to the `user`.
-                Some((connection_id, remote_read)) = readers.next() => {
+                // Some((connection_id, Some(read))) = readers.next() => {
+                Some((connection_id, read)) = readers.next() => {
                     trace!("interceptor_task -> read connection_id {:#?}", connection_id);
 
-                    match remote_read {
+                    match read {
                         Some(read) => {
                             let daemon_read = read
                                 .map_err(ResponseError::from)
@@ -166,18 +171,21 @@ impl TcpOutgoingApi {
                             daemon_tx.send(daemon_message).await?
                         }
                         None => {
-                            trace!("interceptor_task -> close connection {:#?}", connection_id);
-                            writers.remove(&connection_id);
+                            let daemon_close = writers
+                                        .remove(&connection_id)
+                                        .ok_or(ResponseError::NotFound(connection_id as usize))
+                                        .map(|_| DaemonClose { connection_id });
+                            readers.remove(&connection_id);
 
-                            let daemon_message = DaemonTcpOutgoing::Close(connection_id);
-                            daemon_tx.send(daemon_message).await?
+                            // let daemon_message = DaemonTcpOutgoing::Close(daemon_close);
+                            // daemon_tx.send(daemon_message).await?
                         }
                     }
+
                 }
                 else => {
                     // We have no more data coming from any of the remote hosts.
-                    warn!("interceptor_task -> no messages left");
-                    break;
+                    warn!("interceptor_task -> Remote has no messages left!");
                 }
             }
         }

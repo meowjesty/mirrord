@@ -1,14 +1,14 @@
 //! We implement each hook function in a safe function as much as possible, having the unsafe do the
 //! absolute minimum
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     net::SocketAddr,
     os::unix::io::RawFd,
     sync::{Arc, LazyLock, Mutex},
 };
 
 use libc::{c_int, sockaddr, socklen_t};
-use mirrord_protocol::{AddrInfoHint, Port};
+use mirrord_protocol::{AddrInfoHint, ConnectionId, Port};
 use socket2::SockAddr;
 
 use crate::error::{HookError, HookResult as Result};

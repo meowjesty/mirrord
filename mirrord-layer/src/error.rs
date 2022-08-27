@@ -3,7 +3,10 @@ use std::{env::VarError, os::unix::io::RawFd, ptr, str::ParseBoolError};
 use errno::set_errno;
 use kube::config::InferConfigError;
 use libc::FILE;
-use mirrord_protocol::{tcp::LayerTcp, ConnectionId, ResponseError};
+use mirrord_protocol::{
+    tcp::{outgoing::LayerTcpOutgoing, LayerTcp},
+    ConnectionId, ResponseError,
+};
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
 use tracing::{error, warn};
@@ -89,6 +92,9 @@ pub(crate) enum LayerError {
 
     #[error("mirrord-layer: Sender<LayerTcp> failed with `{0}`!")]
     SendErrorLayerTcp(#[from] SendError<LayerTcp>),
+
+    #[error("mirrord-layer: Sender<LayerTcpOutgoing> failed with `{0}`!")]
+    SendErrorLayerTcpOutgoing(#[from] SendError<LayerTcpOutgoing>),
 
     #[error("mirrord-layer: Failed to get `Sender` for sending tcp response!")]
     SendErrorTcpResponse,

@@ -1,9 +1,11 @@
 use core::fmt;
 use std::{
+    borrow::Cow,
     collections::HashMap,
     future::Future,
+    io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    ops::{Deref, DerefMut},
+    ops::{ControlFlow, Deref, DerefMut},
 };
 
 use futures::SinkExt;
@@ -117,15 +119,64 @@ enum Command {
     Close,
 }
 
+async fn intercept_user_stream(
+    connection_id: ConnectionId,
+    read: Result<usize, io::Error>,
+    layer_tx: Sender<LayerTcpOutgoing>,
+    buffer: &[u8],
+) -> Result<(), LayerError> {
+    match read {
+        Err(fail) if fail.kind() == std::io::ErrorKind::WouldBlock => Ok(()),
+        Err(fail) => {
+            error!("Failed reading mirror_stream with {:#?}", fail);
+            Err(fail.into())
+        }
+        Ok(read_amount) => {
+            // Sends the message that the user wrote to our interceptor socket to
+            // be handled on the `agent`, where it'll be forwarded to the remote.
+            let write = LayerWrite {
+                connection_id,
+                bytes: buffer.to_vec(),
+            };
+            let outgoing_write = LayerTcpOutgoing::Write(write);
+
+            Ok(layer_tx.send(outgoing_write).await?)
+        }
+    }
+}
+
+async fn intercept_remote(
+    connection_id: ConnectionId,
+    received: Option<Vec<u8>>,
+    mirror_stream: &mut TcpStream,
+) -> Result<bool, LayerError> {
+    match received {
+        Some(bytes) => {
+            // Writes the data sent by `agent` (that came from the actual remote
+            // stream) to our interceptor socket. When the user tries to read the
+            // remote data, this'll be what they receive.
+            mirror_stream.write_all(&bytes).await?;
+            Ok(true)
+        }
+        None => {
+            warn!(
+                "interceptor_task -> remote_rx closed for {:#?}",
+                connection_id
+            );
+            Ok(false)
+        }
+    }
+}
+
 impl TcpOutgoingHandler {
     async fn interceptor_task(
         layer_tx: Sender<LayerTcpOutgoing>,
         connection_id: ConnectionId,
         mut mirror_stream: TcpStream,
-        remote_rx: Receiver<Vec<u8>>,
+        mut remote_rx: Receiver<Vec<u8>>,
         mut command_rx: Receiver<Command>,
     ) {
-        let mut remote_stream = ReceiverStream::new(remote_rx);
+        // let mut remote_stream = ReceiverStream::new(remote_rx);
         let mut buffer = vec![0; 1024];
 
         // TODO(alex) [high] 2022-08-25: Probably this causing issue, should only call close on
@@ -158,36 +209,20 @@ impl TcpOutgoingHandler {
                 // Reads data that the user is sending from their socket to mirrord's interceptor
                 // socket.
                 read = mirror_stream.read(&mut buffer) => {
-                    match read {
-                        Err(fail) if fail.kind() == std::io::ErrorKind::WouldBlock => {
-                            continue;
-                        },
-                        Err(fail) => {
-                            error!("Failed reading mirror_stream with {:#?}", fail);
-                            break;
-                        }
-                        Ok(read_amount) => {
-                            // Sends the message that the user wrote to our interceptor socket to
-                            // be handled on the `agent`, where it'll be forwarded to the remote.
-                            let write = LayerWrite { connection_id, bytes: buffer[..read_amount].to_vec() };
-                            let outgoing_write = LayerTcpOutgoing::Write(write);
-
-                            if let Err(fail) = layer_tx.send(outgoing_write).await {
-                                error!("Failed sending write message with {:#?}!", fail);
-
-                                break;
-                            }
-                        }
-                    }
-                },
-                Some(bytes) = remote_stream.next() => {
-                    // Writes the data sent by `agent` (that came from the actual remote
-                    // stream) to our interceptor socket. When the user tries to read the
-                    // remote data, this'll be what they receive.
-                    if let Err(fail) = mirror_stream.write_all(&bytes).await {
-                        error!("Failed writing to mirror_stream with {:#?}!", fail);
+                    if let Err(fail) =
+                        intercept_user_stream(connection_id, read, layer_tx.clone(), &buffer).await
+                    {
+                        error!("Failed reading from `mirror_stream` with {:#?}!", fail);
                         break;
                     }
+
+                },
+                received = remote_rx.recv() => {
+                    if let Err(fail) =
+                        intercept_remote(connection_id, received, &mut mirror_stream).await
+                        {
+                            error!("Failed writing to mirror_stream with {:#?}!", fail);
+                        }
                 },
                 else => {
                     warn!("interceptor_task -> Closing with no messages left.");

@@ -1,4 +1,4 @@
-import { lookup } from "dns/promises";
+import https from "node:https";
 
 console.log(">> test_outgoing_traffic_single_request");
 

@@ -41,10 +41,10 @@ function debugDns() {
 // debug_file_ops();
 // debugDns();
 debugRequest("www.rust-lang.org");
-debugRequest("www.rust-lang.org");
+// debugRequest("www.rust-lang.org");
 // debugRequest("www.google.com");
 // debugConnect();
-debugListen();
+// debugListen();
 
 function debugConnect() {
   let options = { readable: true, writable: true };

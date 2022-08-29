@@ -13,7 +13,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{error::AgentError, runtime::set_namespace, util::run_thread};
 
@@ -31,6 +31,86 @@ pub(crate) struct TcpOutgoingApi {
 
     /// Reads the `Daemon` message from the `interceptor_task`.
     daemon_rx: Receiver<Daemon>,
+}
+
+async fn task_layer_message(
+    message: LayerTcpOutgoing,
+    daemon_tx: Sender<Daemon>,
+    writers: &mut HashMap<ConnectionId, OwnedWriteHalf>,
+    readers: &mut StreamMap<ConnectionId, ReaderStream<OwnedReadHalf>>,
+) -> Result<(), AgentError> {
+    match message {
+        // [user] -> [layer] -> [agent] -> [layer]
+        // `user` is asking us to connect to some remote host.
+        LayerTcpOutgoing::Connect(LayerConnect { remote_address }) => {
+            let daemon_connect = TcpStream::connect(remote_address)
+                .await
+                .map_err(From::from)
+                .map(|remote_stream| {
+                    let connection_id = writers
+                        .keys()
+                        .last()
+                        .copied()
+                        .map(|last| last + 1)
+                        .unwrap_or_default();
+
+                    // Split the `remote_stream` so we can keep reading
+                    // and writing from multiple hosts without blocking.
+                    let (read_half, write_half) = remote_stream.into_split();
+                    writers.insert(connection_id, write_half);
+                    readers.insert(connection_id, ReaderStream::new(read_half));
+
+                    DaemonConnect {
+                        connection_id,
+                        remote_address,
+                    }
+                });
+
+            let daemon_message = DaemonTcpOutgoing::Connect(daemon_connect);
+            Ok(daemon_tx.send(daemon_message).await?)
+        }
+        // [user] -> [layer] -> [agent] -> [remote]
+        // `user` wrote some message to the remote host.
+        LayerTcpOutgoing::Write(LayerWrite {
+            connection_id,
+            bytes,
+        }) => {
+            let daemon_write = match writers
+                .get_mut(&connection_id)
+                .ok_or(ResponseError::NotFound(connection_id as usize))
+            {
+                Ok(writer) => writer
+                    .write_all(&bytes)
+                    .await
+                    .map_err(ResponseError::from)
+                    .map(|()| DaemonWrite { connection_id }),
+                Err(fail) => Err(fail),
+            };
+
+            let daemon_message = DaemonTcpOutgoing::Write(daemon_write);
+            Ok(daemon_tx.send(daemon_message).await?)
+        }
+        // [layer] -> [agent]
+        // `layer` closed their interceptor stream.
+        LayerTcpOutgoing::Close(LayerClose { connection_id }) => {
+            trace!(
+                "Close -> connection_id {:#?} | writers {:#?} | readers {:#?}",
+                connection_id,
+                writers,
+                readers
+            );
+            let daemon_close = writers
+                .remove(&connection_id)
+                .inspect(|_| debug!("removed writer"))
+                .ok_or(ResponseError::NotFound(connection_id as usize))
+                .map(|_| DaemonClose { connection_id });
+
+            readers.remove(&connection_id);
+
+            let daemon_message = DaemonTcpOutgoing::Close(daemon_close);
+            Ok(daemon_tx.send(daemon_message).await?)
+        }
+    }
 }
 
 impl TcpOutgoingApi {
@@ -72,86 +152,14 @@ impl TcpOutgoingApi {
                 biased;
 
                 // [layer] -> [agent]
-                layer_message = layer_rx.recv() => {
+                Some(layer_message) = layer_rx.recv() => {
                     trace!("interceptor_task -> layer_message {:?}", layer_message);
-
-                    match layer_message {
-                        Some(layer_message) => {
-                            match layer_message {
-                                // [user] -> [layer] -> [agent] -> [layer]
-                                // `user` is asking us to connect to some remote host.
-                                LayerTcpOutgoing::Connect(LayerConnect { remote_address }) => {
-                                    let daemon_connect =
-                                        TcpStream::connect(remote_address)
-                                            .await
-                                            .map_err(From::from)
-                                            .map(|remote_stream| {
-                                                let connection_id = writers
-                                                    .keys()
-                                                    .last()
-                                                    .copied()
-                                                    .map(|last| last + 1)
-                                                    .unwrap_or_default();
-
-                                                // Split the `remote_stream` so we can keep reading
-                                                // and writing from multiple hosts without blocking.
-                                                let (read_half, write_half) = remote_stream.into_split();
-                                                writers.insert(connection_id, write_half);
-                                                readers.insert(connection_id, ReaderStream::new(read_half));
-
-                                                DaemonConnect {
-                                                    connection_id,
-                                                    remote_address,
-                                                }
-                                            });
-
-                                    let daemon_message = DaemonTcpOutgoing::Connect(daemon_connect);
-                                    daemon_tx.send(daemon_message).await?
-                                }
-                                // [user] -> [layer] -> [agent] -> [remote]
-                                // `user` wrote some message to the remote host.
-                                LayerTcpOutgoing::Write(LayerWrite {
-                                    connection_id,
-                                    bytes,
-                                }) => {
-                                    let daemon_write = match writers
-                                        .get_mut(&connection_id)
-                                        .ok_or(ResponseError::NotFound(connection_id as usize))
-                                    {
-                                        Ok(writer) => writer
-                                            .write_all(&bytes)
-                                            .await
-                                            .map_err(ResponseError::from)
-                                            .map(|()| DaemonWrite { connection_id }),
-                                        Err(fail) => Err(fail),
-                                    };
-
-                                    let daemon_message = DaemonTcpOutgoing::Write(daemon_write);
-                                    daemon_tx.send(daemon_message).await?
-                                }
-                                // [layer] -> [agent]
-                                // `layer` closed their interceptor stream.
-                                LayerTcpOutgoing::Close(LayerClose { connection_id }) => {
-                                    trace!("Close -> connection_id {:#?} | writers {:#?} | readers {:#?}", connection_id, writers, readers);
-                                    let daemon_close = writers
-                                                .remove(&connection_id)
-                                                .inspect(|_| debug!("removed writer"))
-                                                .ok_or(ResponseError::NotFound(connection_id as usize))
-                                                .map(|_| DaemonClose { connection_id });
-
-                                    readers.remove(&connection_id);
-
-                                    let daemon_message = DaemonTcpOutgoing::Close(daemon_close);
-                                    daemon_tx.send(daemon_message).await?
-                                }
-                            }
-                        }
-                        None => {
-                            // We have no more messages coming from `layer`.
-                            warn!("interceptor_task -> No more messages coming from `layer`!");
+                    if let Err(fail) =
+                        task_layer_message(layer_message, daemon_tx.clone(), &mut writers, &mut readers).await
+                        {
+                            error!("interceptor_task -> `task_layer_mesasge` failed with {:#?}", fail);
                             break;
                         }
-                    }
                 }
 
                 // [remote] -> [agent] -> [layer] -> [user]
@@ -186,6 +194,7 @@ impl TcpOutgoingApi {
                 else => {
                     // We have no more data coming from any of the remote hosts.
                     warn!("interceptor_task -> Remote has no messages left!");
+                    break;
                 }
             }
         }

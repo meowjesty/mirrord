@@ -82,7 +82,7 @@ pub(crate) struct TcpOutgoingHandler {
 /// (agent) -> (layer) -> (user)
 #[derive(Debug)]
 pub(crate) struct ConnectionMirror {
-    task: JoinHandle<()>,
+    task: JoinHandle<Result<(), LayerError>>,
     remote_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
     command_tx: Sender<Command>,
 }
@@ -145,29 +145,6 @@ async fn intercept_user_stream(
     }
 }
 
-async fn intercept_remote(
-    connection_id: ConnectionId,
-    received: Option<Vec<u8>>,
-    mirror_stream: &mut TcpStream,
-) -> Result<bool, LayerError> {
-    match received {
-        Some(bytes) => {
-            // Writes the data sent by `agent` (that came from the actual remote
-            // stream) to our interceptor socket. When the user tries to read the
-            // remote data, this'll be what they receive.
-            mirror_stream.write_all(&bytes).await?;
-            Ok(true)
-        }
-        None => {
-            warn!(
-                "interceptor_task -> remote_rx closed for {:#?}",
-                connection_id
-            );
-            Ok(false)
-        }
-    }
-}
-
 impl TcpOutgoingHandler {
     async fn interceptor_task(
         layer_tx: Sender<LayerTcpOutgoing>,
@@ -175,7 +152,7 @@ impl TcpOutgoingHandler {
         mut mirror_stream: TcpStream,
         mut remote_rx: Receiver<Vec<u8>>,
         mut command_rx: Receiver<Command>,
-    ) {
+    ) -> Result<(), LayerError> {
         // let mut remote_stream = ReceiverStream::new(remote_rx);
         let mut buffer = vec![0; 1024];
 
@@ -211,18 +188,20 @@ impl TcpOutgoingHandler {
                 read = mirror_stream.read(&mut buffer) => {
                     if let Err(fail) =
                         intercept_user_stream(connection_id, read, layer_tx.clone(), &buffer).await
-                    {
-                        error!("Failed reading from `mirror_stream` with {:#?}!", fail);
-                        break;
-                    }
+                        {
+                            error!("interceptor_task -> `intercept_user_stream` failed with {:#?}", fail);
+                            break;
+                        }
 
                 },
-                received = remote_rx.recv() => {
-                    if let Err(fail) =
-                        intercept_remote(connection_id, received, &mut mirror_stream).await
-                        {
-                            error!("Failed writing to mirror_stream with {:#?}!", fail);
-                        }
+                Some(ref bytes) = remote_rx.recv() => {
+                    // Writes the data sent by `agent` (that came from the actual remote
+                    // stream) to our interceptor socket. When the user tries to read the
+                    // remote data, this'll be what they receive.
+                    if let Err(fail) = mirror_stream.write_all(bytes).await {
+                        error!("interceptor_task -> `mirror_stream.write_all` failed with {:#?}", fail);
+                        break;
+                    }
                 },
                 else => {
                     warn!("interceptor_task -> Closing with no messages left.");
@@ -238,6 +217,8 @@ impl TcpOutgoingHandler {
             "interceptor_task done -> connection_id {:#?}",
             connection_id
         );
+
+        Ok(())
     }
 
     /// Handles the following hook messages:

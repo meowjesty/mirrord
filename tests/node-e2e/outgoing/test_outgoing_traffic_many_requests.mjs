@@ -4,39 +4,62 @@ console.log(">> test_outgoing_traffic_many_requests");
 
 const hostList = [
   "www.rust-lang.org",
-  "www.nodejs.org",
+  "www.github.com",
   "www.google.com",
   "www.bing.com",
-  "www.github.com",
+  "www.yahoo.com",
+  "www.baidu.com",
+  "www.twitter.com",
+  "www.microsoft.com",
+  "www.youtube.com",
+  "www.live.com",
+  "www.msn.com",
+  "www.google.com.br",
+  "www.yahoo.co.jp",
+  "www.qq.com",
+  // "www.news.yahoo.co.jp",
 ];
 
-hostList.forEach((host) => {
-  const options = {
-    hostname: host,
-    port: 443,
-    path: "/",
-    method: "GET",
-  };
+let requestIndex = 0;
 
-  console.log(`>> host ${host}`);
+function makeRequests() {
+  hostList.forEach((host) => {
+    const options = {
+      hostname: host,
+      port: 443,
+      path: "/",
+      method: "GET",
+    };
 
-  const request = https.request(options, (response) => {
-    console.log(`>> ${host} statusCode ${response.statusCode}`);
+    console.log(`>> host ${host}`);
 
-    response.on("data", (data) => {
-      process.stdout.write(`>> received ${data.slice(0, 16)}`);
+    const request = https.request(options, (response) => {
+      requestIndex += 1;
+      console.log(
+        `>> ${requestIndex} ${host} statusCode ${response.statusCode}`
+      );
+
+      response.on("data", (data) => {
+        process.stdout.write(`>> received ${data.slice(0, 4)}`);
+      });
+
+      response.on("error", (fail) => {
+        process.stderr.write(`>> response from ${host} failed with ${fail}`);
+        throw fail;
+      });
     });
 
-    response.on("error", (fail) => {
-      process.stderr.write(`>> response from ${host} failed with ${fail}`);
+    request.on("error", (fail) => {
+      process.stderr.write(
+        `>> request to ${requestIndex} ${host} failed with ${fail}`
+      );
       throw fail;
     });
-  });
 
-  request.on("error", (fail) => {
-    process.stderr.write(`>> request to ${host} failed with ${fail}`);
-    throw fail;
+    request.end();
   });
+}
 
-  request.end();
-});
+for (let i = 0; i < 1; i++) {
+  makeRequests();
+}

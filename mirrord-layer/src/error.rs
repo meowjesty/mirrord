@@ -1,4 +1,4 @@
-use std::{env::VarError, os::unix::io::RawFd, ptr, str::ParseBoolError};
+use std::{env::VarError, net::SocketAddr, os::unix::io::RawFd, ptr, str::ParseBoolError};
 
 use errno::set_errno;
 use kube::config::InferConfigError;
@@ -134,6 +134,9 @@ pub(crate) enum LayerError {
 
     #[error("mirrord-layer: Container `{0}` not found in namespace `{1}` pod `{2}`")]
     ContainerNotFound(String, String, String),
+
+    #[error("mirrord-layer: HookError failed with `{0}`!")]
+    Hook(#[from] HookError),
 }
 
 // Cannot have a generic From<T> implementation for this error, so explicitly implemented here.

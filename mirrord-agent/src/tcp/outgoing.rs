@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, thread};
+use std::{
+    collections::HashMap, os::unix::prelude::AsRawFd, path::PathBuf, sync::atomic::AtomicU64,
+    thread,
+};
 
 use mirrord_protocol::{tcp::outgoing::*, ConnectionId, ResponseError};
 use streammap_ext::StreamMap;
@@ -15,7 +18,11 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use tracing::{trace, warn};
 
-use crate::{error::AgentError, runtime::set_namespace, util::run_thread};
+use crate::{
+    error::AgentError,
+    runtime::set_namespace,
+    util::{run_thread, IndexAllocator},
+};
 
 type Layer = LayerTcpOutgoing;
 type Daemon = DaemonTcpOutgoing;
@@ -32,6 +39,8 @@ pub(crate) struct TcpOutgoingApi {
     /// Reads the `Daemon` message from the `interceptor_task`.
     daemon_rx: Receiver<Daemon>,
 }
+
+static CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 
 impl TcpOutgoingApi {
     pub(crate) fn new(pid: Option<u64>) -> Self {
@@ -61,6 +70,8 @@ impl TcpOutgoingApi {
             set_namespace(namespace).unwrap();
         }
 
+        let mut allocator = IndexAllocator::default();
+
         // TODO: Right now we're manually keeping these 2 maps in sync (aviram suggested using
         // `Weak` for `writers`).
         let mut writers: HashMap<ConnectionId, OwnedWriteHalf> = HashMap::default();
@@ -77,18 +88,24 @@ impl TcpOutgoingApi {
                     match layer_message {
                         // [user] -> [layer] -> [agent] -> [layer]
                         // `user` is asking us to connect to some remote host.
-                        LayerTcpOutgoing::Connect(LayerConnect { remote_address }) => {
+                        LayerTcpOutgoing::Connect(LayerConnect { remote_address, user_fd }) => {
                             let daemon_connect =
                                 TcpStream::connect(remote_address)
                                     .await
                                     .map_err(From::from)
                                     .map(|remote_stream| {
-                                        let connection_id = writers
-                                            .keys()
-                                            .last()
-                                            .copied()
-                                            .map(|last| last + 1)
-                                            .unwrap_or_default();
+                                        // let connection_id = writers
+                                        //     .keys()
+                                        //     .last()
+                                        //     .copied()
+                                        //     .map(|last| last + 1)
+                                        //     .unwrap_or_default();
+                                        // let connection_id = CONNECTION_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                        // let connection_id = remote_stream.as_raw_fd() as ConnectionId;
+                                        let connection_id = allocator
+                                            .next_index()
+                                            .ok_or_else(|| ResponseError::AllocationFailure("interceptor_task".to_string()))
+                                            .unwrap() as ConnectionId;
 
                                         // Split the `remote_stream` so we can keep reading
                                         // and writing from multiple hosts without blocking.
@@ -96,10 +113,7 @@ impl TcpOutgoingApi {
                                         writers.insert(connection_id, write_half);
                                         readers.insert(connection_id, ReaderStream::new(read_half));
 
-                                        DaemonConnect {
-                                            connection_id,
-                                            remote_address,
-                                        }
+                                        DaemonConnect {connection_id,remote_address, user_fd }
                                     });
 
                             let daemon_message = DaemonTcpOutgoing::Connect(daemon_connect);

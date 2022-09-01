@@ -9,6 +9,7 @@ use crate::{ConnectionId, RemoteResult};
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct LayerConnect {
     pub remote_address: SocketAddr,
+    pub user_fd: i32,
 }
 
 /// `user` wants to write `bytes` to remote host identified by `connection_id`.
@@ -44,6 +45,7 @@ pub enum LayerTcpOutgoing {
 pub struct DaemonConnect {
     pub connection_id: ConnectionId,
     pub remote_address: SocketAddr,
+    pub user_fd: i32,
 }
 
 #[derive(Encode, Decode, PartialEq, Eq, Clone)]

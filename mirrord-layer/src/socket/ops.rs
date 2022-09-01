@@ -55,9 +55,10 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Result<Raw
         protocol,
         state: SocketState::default(),
     };
-    debug!(
+    trace!(
         "socket -> socket_fd {:#?} | new_socket {:#?}",
-        socket_fd, new_socket
+        socket_fd,
+        new_socket
     );
 
     let mut sockets = SOCKETS.lock()?;
@@ -260,25 +261,24 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<()> {
                 "connect -> SocketState::Initialized {:#?}",
                 user_socket_info
             );
-            let (mirror_tx, mirror_rx) = oneshot::channel();
+            let (connect_tx, connect_rx) = oneshot::channel();
 
             let connect = Connect {
                 remote_address,
-                channel_tx: mirror_tx,
+                connect_tx,
+                user_fd: sockfd,
             };
 
             let connect_hook = TcpOutgoing::Connect(connect);
 
             blocking_send_hook_message(HookMessage::TcpOutgoing(connect_hook))?;
-            let MirrorAddress(mirror_address) = mirror_rx.blocking_recv()??;
+            let MirrorAddress(mirror_address) = connect_rx.blocking_recv()??;
 
             let connect_to = SockAddr::from(mirror_address);
 
             // Connect to the interceptor socket that is listening.
             let connect_result =
                 unsafe { FN_CONNECT(sockfd, connect_to.as_ptr(), connect_to.len()) };
-
-            debug!("connect -> connect_result {:#?}", connect_result);
 
             let err_code = errno::errno().0;
             if connect_result == -1 && err_code != libc::EINPROGRESS && err_code != libc::EINTR {
@@ -295,6 +295,11 @@ pub(super) fn connect(sockfd: RawFd, remote_address: SocketAddr) -> Result<()> {
                 remote_address,
                 mirror_address,
             };
+
+            debug!(
+                "connect -> fd {:#?} | remote_address {:#?} | connected {:#?} | dns {:#?}",
+                sockfd, remote_address, connected, DEBUG_DNS
+            );
 
             Arc::get_mut(&mut user_socket_info).unwrap().state = SocketState::Connected(connected);
 
@@ -451,6 +456,10 @@ pub(super) fn dup(fd: c_int, dup_fd: i32) -> Result<()> {
     Ok(())
 }
 
+// TODO(alex) [low] 2022-09-01: Remove this debug thingy.
+static DEBUG_DNS: LazyLock<Mutex<HashMap<String, Vec<SocketAddr>>>> =
+    LazyLock::new(|| Mutex::default());
+
 /// Retrieves the result of calling `getaddrinfo` from a remote host (resolves remote DNS),
 /// converting the result into a `Box` allocated raw pointer of `libc::addrinfo` (which is basically
 /// a linked list of such type).
@@ -476,8 +485,8 @@ pub(super) fn getaddrinfo(
 
     let (hook_channel_tx, hook_channel_rx) = oneshot::channel();
     let hook = GetAddrInfoHook {
-        node,
-        service,
+        node: node.clone(),
+        service: service.clone(),
         hints,
         hook_channel_tx,
     };
@@ -485,6 +494,8 @@ pub(super) fn getaddrinfo(
     blocking_send_hook_message(HookMessage::GetAddrInfoHook(hook))?;
 
     let addr_info_list = hook_channel_rx.blocking_recv()??;
+
+    let mut debug_addresses = Vec::with_capacity(32);
 
     let result = addr_info_list
         .into_iter()
@@ -500,6 +511,12 @@ pub(super) fn getaddrinfo(
             } = addr_info;
 
             let rawish_sockaddr = socket2::SockAddr::from(sockaddr);
+
+            // TODO(alex) [low] 2022-09-01: Remove this debug thingy.
+            {
+                debug_addresses.push(rawish_sockaddr.as_socket().unwrap());
+            }
+
             let ai_addrlen = rawish_sockaddr.len();
 
             // Must outlive this function, as it is stored as a pointer in `libc::addrinfo`.
@@ -533,7 +550,15 @@ pub(super) fn getaddrinfo(
         })
         .ok_or(HookError::DNSNoName);
 
-    info!("getaddrinfo -> result {:#?}", result);
+    debug!(
+        "getaddrinfo -> result {:#?} for node {:#?} | service {:#?}",
+        result, node, service
+    );
+
+    DEBUG_DNS
+        .lock()
+        .unwrap()
+        .insert(node.unwrap(), debug_addresses);
 
     result
 }

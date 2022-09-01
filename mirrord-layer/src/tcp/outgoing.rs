@@ -1,9 +1,10 @@
 use core::fmt;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
+    os::unix::prelude::RawFd,
 };
 
 use futures::SinkExt;
@@ -16,12 +17,12 @@ use tokio::{
     task,
 };
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
-    common::{ResponseChannel, ResponseDeque},
+    common::ResponseChannel,
     detour::DetourGuard,
-    error::LayerError,
+    error::{HookError, LayerError},
 };
 
 /// Wrapper type for the (layer) socket address that intercepts the user's socket messages.
@@ -30,8 +31,9 @@ pub(crate) struct MirrorAddress(pub(crate) SocketAddr);
 
 #[derive(Debug)]
 pub(crate) struct Connect {
+    pub(crate) user_fd: RawFd,
     pub(crate) remote_address: SocketAddr,
-    pub(crate) channel_tx: ResponseChannel<MirrorAddress>,
+    pub(crate) connect_tx: ResponseChannel<MirrorAddress>,
 }
 
 pub(crate) struct Write {
@@ -62,9 +64,10 @@ pub(crate) struct TcpOutgoingHandler {
     /// passed all the way back to the user.
     mirrors: HashMap<ConnectionId, ConnectionMirror>,
 
-    /// Holds the connection requests from the `connect` hook. It's main use is to reply back with
-    /// the `SocketAddr` of the socket that'll be used to intercept the user's socket operations.
-    connect_queue: ResponseDeque<MirrorAddress>,
+    /// Holds the connection requests from the `connect` hook, where the keys are the remote
+    /// addresses. It's main use is to reply back with the `SocketAddr` of the socket that'll
+    /// be used to intercept the user's socket operations.
+    connect_queue: HashMap<RawFd, ResponseChannel<MirrorAddress>>,
 
     /// Channel used to pass messages (currently only `Write`) from an intercepted socket to the
     /// main `layer` loop.
@@ -118,6 +121,13 @@ impl TcpOutgoingHandler {
         let mut remote_stream = ReceiverStream::new(remote_rx);
         let mut buffer = vec![0; 1024];
 
+        debug!(
+            "interceptor_task -> connection_id {:#?} | peer {:#?} | local {:#?}",
+            connection_id,
+            mirror_stream.peer_addr(),
+            mirror_stream.local_addr(),
+        );
+
         // Sends a message to close the remote stream in `agent`, when it's
         // being closed in `layer`.
         //
@@ -163,7 +173,6 @@ impl TcpOutgoingHandler {
 
                             if let Err(fail) = layer_tx.send(outgoing_write).await {
                                 error!("Failed sending write message with {:#?}!", fail);
-
                                 break;
                             }
                         }
@@ -181,7 +190,7 @@ impl TcpOutgoingHandler {
                             }
                         },
                         None => {
-                            warn!("interceptor_task -> exiting due to remote stream closed!");
+                            warn!("interceptor_task -> remote stream {:#?} closed", connection_id);
                             break;
                         }
                     }
@@ -214,18 +223,20 @@ impl TcpOutgoingHandler {
 
         match message {
             TcpOutgoing::Connect(Connect {
+                user_fd,
                 remote_address,
-                channel_tx,
+                connect_tx,
             }) => {
-                trace!("Connect -> remote_address {:#?}", remote_address);
+                debug!("Connect -> remote_address {:#?}", remote_address);
 
-                // TODO: We could be losing track of the proper order to respond to these (aviram
-                // suggests using a `HashMap`).
-                self.connect_queue.push_back(channel_tx);
+                self.connect_queue.insert(user_fd, connect_tx);
 
                 Ok(codec
                     .send(ClientMessage::TcpOutgoing(LayerTcpOutgoing::Connect(
-                        LayerConnect { remote_address },
+                        LayerConnect {
+                            remote_address,
+                            user_fd,
+                        },
                     )))
                     .await?)
             }
@@ -258,6 +269,7 @@ impl TcpOutgoingHandler {
                 let DaemonConnect {
                     connection_id,
                     remote_address,
+                    user_fd,
                 } = connect?;
 
                 let mirror_stream = {
@@ -277,9 +289,14 @@ impl TcpOutgoingHandler {
                     // Creates the listener that will wait for the user's socket connection.
                     let mirror_address = MirrorAddress(mirror_listener.local_addr()?);
 
+                    debug!(
+                        "handle_daemon_message -> self.connect_queue {:#?}",
+                        self.connect_queue
+                    );
+
                     self.connect_queue
-                        .pop_front()
-                        .ok_or(LayerError::SendErrorTcpResponse)?
+                        .remove(&user_fd)
+                        .ok_or(HookError::LocalFDNotFound(user_fd))?
                         .send(Ok(mirror_address))
                         .map_err(|_| LayerError::SendErrorTcpResponse)?;
 

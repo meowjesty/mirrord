@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap, os::unix::prelude::AsRawFd, path::PathBuf, sync::atomic::AtomicU64,
-    thread,
-};
+use std::{collections::HashMap, path::PathBuf, thread};
 
 use mirrord_protocol::{tcp::outgoing::*, ConnectionId, ResponseError};
 use streammap_ext::StreamMap;
@@ -39,8 +36,6 @@ pub(crate) struct TcpOutgoingApi {
     /// Reads the `Daemon` message from the `interceptor_task`.
     daemon_rx: Receiver<Daemon>,
 }
-
-static CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 
 impl TcpOutgoingApi {
     pub(crate) fn new(pid: Option<u64>) -> Self {
@@ -94,14 +89,6 @@ impl TcpOutgoingApi {
                                     .await
                                     .map_err(From::from)
                                     .map(|remote_stream| {
-                                        // let connection_id = writers
-                                        //     .keys()
-                                        //     .last()
-                                        //     .copied()
-                                        //     .map(|last| last + 1)
-                                        //     .unwrap_or_default();
-                                        // let connection_id = CONNECTION_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                                        // let connection_id = remote_stream.as_raw_fd() as ConnectionId;
                                         let connection_id = allocator
                                             .next_index()
                                             .ok_or_else(|| ResponseError::AllocationFailure("interceptor_task".to_string()))

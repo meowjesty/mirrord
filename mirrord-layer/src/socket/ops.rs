@@ -11,7 +11,7 @@ use dns_lookup::AddrInfo;
 use libc::{c_int, sockaddr, socklen_t};
 use socket2::SockAddr;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 use super::{hooks::*, *};
 use crate::{

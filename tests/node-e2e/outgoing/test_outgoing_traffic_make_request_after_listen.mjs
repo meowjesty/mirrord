@@ -23,8 +23,8 @@ const makeRequest = () => {
       throw fail;
     });
 
-    if (response.statusCode !== 200) {
-      throw ">> response.statusCode !== 200";
+    if (response.statusCode >= 400 && response.statusCode < 500) {
+      throw `>> Failed with error status code ${response.statusCode}`;
     }
   });
 
@@ -35,7 +35,6 @@ const makeRequest = () => {
 
   request.on("finish", () => {
     process.stdout.write(">> success");
-    process.exit();
   });
 
   request.end();
@@ -52,11 +51,13 @@ const listen = () => {
       console.log(">> server listening to %j", server.address());
 
       makeRequest();
+
+      server.close();
     }
   );
 
   server.on("error", (fail) => {
-    process.stderr.write(">> createServer failed with `${fail}`");
+    process.stderr.write(`>> createServer failed with ${fail}`);
     throw fail;
   });
 
@@ -73,7 +74,7 @@ const listen = () => {
       socket.write(d);
     });
 
-    socket.once("close", () => {
+    socket.on("close", () => {
       console.log(">> connection from %s closed", remoteAddress);
     });
 

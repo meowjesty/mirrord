@@ -6,6 +6,9 @@ Previous versions had CHANGELOG per component, we decided to combine all reposit
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+### Fixed
+- mirrord-agent: Use `IndexAllocator` to properly generate `ConnectionId`s for the tcp outgoing feature.
+- tests: Fix outgoing and DNS tests that were passing invalid flags to mirrord.
 
 
 ## 2.11.0

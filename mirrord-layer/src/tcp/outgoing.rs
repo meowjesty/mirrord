@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},

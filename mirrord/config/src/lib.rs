@@ -12,6 +12,15 @@ pub mod outgoing;
 pub mod target;
 pub mod util;
 
+// TODO(alex) [high] 2022-11-11:
+// In onrder to support markdown we need `markdownDescription` which only works in `properties`.
+// See https://github.com/microsoft/vscode/issues/34498#issuecomment-341025799
+//
+// Also `schemars` messes up with lines which further breaks markdown.
+// See https://github.com/GREsau/schemars/issues/38#issuecomment-826395307
+// https://github.com/GREsau/schemars/issues/120
+// https://github.com/GREsau/schemars/issues/129
+
 /// To generate the `mirrord-schema.json` file see
 /// [`tests::check_schema_file_exists_and_is_valid_or_create_it`].
 ///

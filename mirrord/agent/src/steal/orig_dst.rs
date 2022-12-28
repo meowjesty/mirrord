@@ -5,6 +5,11 @@ use std::{io, net::SocketAddr};
 
 use tokio::net::TcpStream;
 
+/// IPTABLES rewwrites the header of the packet, changing it's IP address to "localhost", and port
+/// to `4143`.
+///
+/// The original destination is stored in the kernel, and can be retrieved with the socket option
+/// [`libc::SO_ORIGINAL_DST`].
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 #[tracing::instrument(level = "trace")]

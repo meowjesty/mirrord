@@ -1,7 +1,7 @@
 use mirrord_protocol::Port;
 use nix::unistd::{getgid, Gid};
 use rand::distributions::{Alphanumeric, DistString};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::error::{AgentError, Result};
 
@@ -108,15 +108,17 @@ where
         let gid = getgid();
 
         self.add_redirect(redirected_port, target_port)
-            .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))?;
+            .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))
+            .inspect_err(|f| error!("Failed adding redirect {f:#?}"))?;
 
         self.inner
             .insert_rule(
                 &self.chain_name,
-                &format!("-m owner --gid-owner {gid} -p tcp -j RETURN"),
+                &format!("-m owner --gid-owner {gid} -j RETURN"),
                 1,
             )
-            .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))?;
+            .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
+            .inspect_err(|f| error!("Failed adding bypass {f:#?}"))?;
 
         // self.add_return()
         //     .inspect(|_| info!("Added return {:#?}", self.list_rules()))?;

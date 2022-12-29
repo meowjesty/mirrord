@@ -9,7 +9,7 @@ const server = http.createServer((req, res) => {
 
     res.on("finish", () => {
         console.log(`>> response is done`)
-        server.close();
+        // server.close();
     });
 
 });

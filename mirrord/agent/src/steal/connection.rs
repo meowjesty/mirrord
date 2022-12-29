@@ -22,7 +22,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
-use tracing::error;
+use tracing::{debug, error};
 
 use super::*;
 use crate::{
@@ -107,7 +107,7 @@ pub(crate) struct TcpConnectionStealer {
 impl TcpConnectionStealer {
     /// Initializes a new [`TcpConnectionStealer`] fields, but doesn't start the actual working
     /// task (call [`TcpConnectionStealer::start`] to do so).
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(level = "info")]
     pub(crate) async fn new(
         command_rx: Receiver<StealerCommand>,
         pid: Option<u64>,
@@ -388,13 +388,22 @@ impl TcpConnectionStealer {
 
     /// Add port redirection to iptables to steal `port`.
     fn redirect_port(&mut self, port: Port) -> Result<()> {
-        self.iptables()?
-            .add_redirect(port, self.stealer.local_addr()?.port())
+        let iptables = self.iptables()?;
+
+        iptables
+            .add_stealer_rule(port, self.stealer.local_addr()?.port())
+            .and_then(|_| {
+                iptables
+                    .list_rules()
+                    .inspect(|rules| debug!("iptables rules {rules:#?}"))
+                    .map(|_| ())
+            })
     }
 
     fn stop_redirecting_port(&mut self, port: Port) -> Result<()> {
-        self.iptables()?
-            .remove_redirect(port, self.stealer.local_addr()?.port())
+        let iptables = self.iptables()?;
+
+        iptables.remove_stealer_rule(port, self.stealer.local_addr()?.port())
     }
 
     /// Helper function to handle [`Command::PortSubscribe`] messages.

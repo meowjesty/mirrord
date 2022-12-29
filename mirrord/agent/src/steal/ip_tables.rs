@@ -1,5 +1,7 @@
 use mirrord_protocol::Port;
+use nix::unistd::{getgid, Gid};
 use rand::distributions::{Alphanumeric, DistString};
+use tracing::{debug, info};
 
 use crate::error::{AgentError, Result};
 
@@ -12,16 +14,26 @@ pub(super) trait IPTables {
     fn insert_rule(&self, chain: &str, rule: &str, index: i32) -> Result<()>;
     fn list_rules(&self, chain: &str) -> Result<Vec<String>>;
     fn remove_rule(&self, chain: &str, rule: &str) -> Result<()>;
+    fn replace_rule(&self, chain_name: &str, rule: &str, position: i32) -> Result<()>;
 }
 
 impl IPTables for iptables::IPTables {
+    #[tracing::instrument(level = "debug", skip(self))]
     fn create_chain(&self, name: &str) -> Result<()> {
         self.new_chain(IPTABLES_TABLE_NAME, name)
             .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
         self.append(IPTABLES_TABLE_NAME, name, "-j RETURN")
             .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
 
+        info!("Chains {:#?}", self.list_chains("nat"));
+        info!("Rules {:#?}", self.list_rules(name));
+
         Ok(())
+    }
+
+    fn replace_rule(&self, chain_name: &str, rule: &str, position: i32) -> Result<()> {
+        self.replace(IPTABLES_TABLE_NAME, chain_name, rule, position)
+            .map_err(|e| AgentError::IPTablesError(e.to_string()))
     }
 
     fn remove_chain(&self, name: &str) -> Result<()> {
@@ -71,6 +83,7 @@ impl<IPT> SafeIpTables<IPT>
 where
     IPT: IPTables,
 {
+    #[tracing::instrument(level = "debug", skip(ipt))]
     pub(super) fn new(ipt: IPT) -> Result<Self> {
         let formatter = IPTableFormatter::detect(&ipt)?;
 
@@ -88,21 +101,94 @@ where
         })
     }
 
+    /*
+        "-N MIRRORD_REDIRECT_HsKZe",
+        "-A MIRRORD_REDIRECT_HsKZe -j RETURN",
+        "-A MIRRORD_REDIRECT_HsKZe -p tcp -m owner --gid-owner 25188 -j RETURN",
+        "-A MIRRORD_REDIRECT_HsKZe -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 42773",
+    */
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub(super) fn add_stealer_rule(&self, redirected_port: Port, target_port: Port) -> Result<()> {
+        /*
+        We just ignore everything:
+
+            "-N MIRRORD_REDIRECT_J4Juk",
+            "-A MIRRORD_REDIRECT_J4Juk -j RETURN",
+            "-A MIRRORD_REDIRECT_J4Juk -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 35673",
+            "-A MIRRORD_REDIRECT_J4Juk -p tcp -m owner --gid-owner 13049 -j RETURN",
+
+            self.add_redirect(redirected_port, target_port)
+                .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))
+                .and_then(|_| self.add_bypass_mirrord())
+                .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
+        */
+
+        self.add_bypass_mirrord()
+            .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
+            .and_then(|_| self.add_redirect(redirected_port, target_port))
+            .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub(super) fn remove_stealer_rule(
+        &self,
+        redirected_port: Port,
+        target_port: Port,
+    ) -> Result<()> {
+        self.remove_bypass_mirrord()
+            .and_then(|_| self.remove_redirect(redirected_port, target_port))
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn add_redirect(&self, redirected_port: Port, target_port: Port) -> Result<()> {
-        self.inner.insert_rule(
+    fn add_return(&self) -> Result<()> {
+        self.inner.add_rule(&self.chain_name, &format!("-j RETURN"))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn remove_return(&self) -> Result<()> {
+        self.inner
+            .remove_rule(&self.chain_name, &format!("-j RETURN"))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn add_bypass_mirrord(&self) -> Result<()> {
+        let gid = getgid();
+
+        self.inner.add_rule(
             &self.chain_name,
-            &self.formatter.redirect_rule(redirected_port, target_port),
-            1,
+            &format!("-m owner --gid-owner {gid} -p tcp -j RETURN"),
         )
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn remove_redirect(&self, redirected_port: Port, target_port: Port) -> Result<()> {
+    fn remove_bypass_mirrord(&self) -> Result<()> {
+        let gid = getgid();
+
+        self.inner.remove_rule(
+            &self.chain_name,
+            &format!("-m owner --gid-owner {gid} -p tcp -j RETURN"),
+        )
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn add_redirect(&self, redirected_port: Port, target_port: Port) -> Result<()> {
+        self.inner.add_rule(
+            &self.chain_name,
+            &self.formatter.redirect_rule(redirected_port, target_port),
+        )
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn remove_redirect(&self, redirected_port: Port, target_port: Port) -> Result<()> {
         self.inner.remove_rule(
             &self.chain_name,
             &self.formatter.redirect_rule(redirected_port, target_port),
         )
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub(super) fn list_rules(&self) -> Result<Vec<String>> {
+        self.inner.list_rules(&self.chain_name)
     }
 }
 

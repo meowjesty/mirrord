@@ -22,6 +22,15 @@ impl IPTables for iptables::IPTables {
     fn create_chain(&self, name: &str) -> Result<()> {
         self.new_chain(IPTABLES_TABLE_NAME, name)
             .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
+
+        let gid = getgid();
+        self.append(
+            IPTABLES_TABLE_NAME,
+            name,
+            &format!("-m owner --gid-owner {gid} -p tcp -j RETURN"),
+        )
+        .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
+
         self.append(IPTABLES_TABLE_NAME, name, "-j RETURN")
             .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
 
@@ -123,9 +132,12 @@ where
                 .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
         */
 
-        self.add_bypass_mirrord()
-            .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
-            .and_then(|_| self.add_redirect(redirected_port, target_port))
+        // self.add_bypass_mirrord()
+        //     .inspect(|_| info!("Added bypass {:#?}", self.list_rules()))
+        //     .and_then(|_| self.add_redirect(redirected_port, target_port))
+        //     .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))
+
+        self.add_redirect(redirected_port, target_port)
             .inspect(|_| info!("Added redirect {:#?}", self.list_rules()))
     }
 

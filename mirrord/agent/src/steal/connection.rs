@@ -388,22 +388,24 @@ impl TcpConnectionStealer {
 
     /// Add port redirection to iptables to steal `port`.
     fn redirect_port(&mut self, port: Port) -> Result<()> {
-        let iptables = self.iptables()?;
+        // let iptables = self.iptables()?;
 
-        iptables
-            .add_stealer_rule(port, self.stealer.local_addr()?.port())
-            .and_then(|_| {
-                iptables
-                    .list_rules()
-                    .inspect(|rules| debug!("iptables rules {rules:#?}"))
-                    .map(|_| ())
-            })
+        // iptables
+        //     .add_stealer_rule(port, self.stealer.local_addr()?.port())
+        //     .and_then(|_| {
+        //         iptables
+        //             .list_rules()
+        //             .inspect(|rules| debug!("iptables rules {rules:#?}"))
+        //             .map(|_| ())
+        //     })
+        Ok(())
     }
 
     fn stop_redirecting_port(&mut self, port: Port) -> Result<()> {
-        let iptables = self.iptables()?;
+        // let iptables = self.iptables()?;
 
-        iptables.remove_stealer_rule(port, self.stealer.local_addr()?.port())
+        // iptables.remove_stealer_rule(port, self.stealer.local_addr()?.port())
+        Ok(())
     }
 
     /// Helper function to handle [`Command::PortSubscribe`] messages.

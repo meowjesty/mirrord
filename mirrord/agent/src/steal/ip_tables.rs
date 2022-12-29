@@ -23,6 +23,9 @@ impl IPTables for iptables::IPTables {
         self.new_chain(IPTABLES_TABLE_NAME, name)
             .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
 
+        self.append(IPTABLES_TABLE_NAME, name, "-j RETURN")
+            .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
+
         let gid = getgid();
         self.append(
             IPTABLES_TABLE_NAME,
@@ -30,9 +33,6 @@ impl IPTables for iptables::IPTables {
             &format!("-m owner --gid-owner {gid} -p tcp -j RETURN"),
         )
         .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
-
-        self.append(IPTABLES_TABLE_NAME, name, "-j RETURN")
-            .map_err(|e| AgentError::IPTablesError(e.to_string()))?;
 
         info!("Chains {:#?}", self.list_chains("nat"));
         info!("Rules {:#?}", self.list_rules(name));

@@ -25,7 +25,12 @@ use error::{LayerError, Result};
 use file::{filter::FileFilter, OPEN_FILES};
 use hooks::HookManager;
 use libc::c_int;
-use mirrord_config::{fs::FsConfig, util::VecOrSingle, LayerConfig};
+use mirrord_config::{
+    fs::FsConfig,
+    incoming::{steal::StealModeConfig, IncomingConfig},
+    util::VecOrSingle,
+    LayerConfig,
+};
 use mirrord_layer_macro::{hook_fn, hook_guard_fn};
 use mirrord_protocol::{
     dns::{DnsLookup, GetAddrInfoRequest},
@@ -416,12 +421,18 @@ async fn thread_loop(
     rx: Receiver<DaemonMessage>,
     config: LayerConfig,
 ) {
-    let mut layer = Layer::new(
-        tx,
-        rx,
-        config.feature.network.incoming.is_steal(),
-        config.feature.network.http_filter,
-    );
+    let is_steal = config.feature.network.incoming.is_steal();
+    let http_filter = if let IncomingConfig::Steal(steal_config) = config.feature.network.incoming {
+        match steal_config {
+            StealModeConfig::Simple => None,
+            StealModeConfig::Advanced(advanced) => advanced.filter,
+        }
+    } else {
+        None
+    };
+
+    let mut layer = Layer::new(tx, rx, is_steal, http_filter);
+
     loop {
         select! {
             hook_message = receiver.recv() => {
@@ -512,10 +523,10 @@ async fn start_layer_thread(
         ) {
             (Some(_), Some(_)) => panic!(
                 r#"mirrord-layer encountered an issue:
-    
+
                 mirrord doesn't support specifying both
                 `OVERRIDE_ENV_VARS_EXCLUDE` and `OVERRIDE_ENV_VARS_INCLUDE` at the same time!
-    
+
                 > Use either `--override_env_vars_exclude` or `--override_env_vars_include`.
                 >> If you want to include all, use `--override_env_vars_include="*"`."#
             ),
@@ -556,7 +567,7 @@ async fn start_layer_thread(
               _ = sleep(Duration::from_secs(config.agent.communication_timeout.unwrap_or(30).into())) => {
                 graceful_exit!(r#"
                     agent response timeout - expected env var response
-    
+
                     check that the agent image can run on your architecture
                 "#);
               }

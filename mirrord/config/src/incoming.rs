@@ -30,10 +30,10 @@ impl FromStr for IncomingConfig {
 
     fn from_str(val: &str) -> Result<Self, Self::Err> {
         match val.parse::<bool>() {
-            Ok(true) => Ok(IncomingConfig::Steal(StealModeConfig::disabled_config()?)),
+            Ok(true) => Ok(IncomingConfig::Steal(StealModeConfig::default())),
             Ok(false) => Ok(IncomingConfig::Mirror),
             Err(_) => match val {
-                "steal" => Ok(IncomingConfig::Steal(StealModeConfig::disabled_config()?)),
+                "steal" => Ok(IncomingConfig::Steal(StealModeConfig::default())),
                 "mirror" => Ok(IncomingConfig::Mirror),
                 _ => Err(IncomingConfigParseError),
             },

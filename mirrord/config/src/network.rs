@@ -75,7 +75,7 @@ mod tests {
 
     #[rstest]
     fn default(
-        #[values((None, IncomingConfig::Mirror), (Some("false"), IncomingConfig::Mirror), (Some("true"), IncomingConfig::Steal))]
+        #[values((None, IncomingConfig::Mirror), (Some("false"), IncomingConfig::Mirror), (Some("true"), IncomingConfig::Steal(crate::incoming::steal::StealModeConfig::default())))]
         incoming: (Option<&str>, IncomingConfig),
         #[values((None, true), (Some("false"), false))] dns: (Option<&str>, bool),
     ) {

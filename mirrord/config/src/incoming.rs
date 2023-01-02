@@ -4,6 +4,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use thiserror::Error;
 
+pub mod steal;
+
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IncomingConfig {

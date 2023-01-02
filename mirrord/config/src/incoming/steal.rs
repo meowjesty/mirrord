@@ -11,24 +11,24 @@ const FILTER_ENV_VAR: &str = "MIRRORD_HTTP_TRAFFIC_FILTER";
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, JsonSchema)]
 #[serde(untagged, rename_all = "lowercase")]
-pub enum StealUserConfig {
+pub enum StealModeConfig {
     Simple,
     Advanced(AdvancedStealUserConfig),
 }
 
-impl Default for StealUserConfig {
+impl Default for StealModeConfig {
     fn default() -> Self {
-        StealUserConfig::Simple
+        StealModeConfig::Simple
     }
 }
 
-impl MirrordConfig for StealUserConfig {
+impl MirrordConfig for StealModeConfig {
     type Generated = StealConfig;
 
     fn generate_config(self) -> Result<Self::Generated, ConfigError> {
         let config = match self {
-            StealUserConfig::Simple => StealConfig { filter: None },
-            StealUserConfig::Advanced(advanced) => advanced.generate_config()?,
+            StealModeConfig::Simple => StealConfig { filter: None },
+            StealModeConfig::Advanced(advanced) => advanced.generate_config()?,
         };
 
         Ok(config)
@@ -39,7 +39,7 @@ impl MirrordConfig for StealUserConfig {
 #[config(
     map_to = "AdvancedStealUserConfig",
     derive = "PartialEq,Eq,JsonSchema",
-    generator = "StealUserConfig"
+    generator = "StealModeConfig"
 )]
 pub struct StealConfig {
     pub filter: Option<String>,

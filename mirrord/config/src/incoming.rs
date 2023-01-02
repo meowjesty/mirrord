@@ -4,13 +4,15 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use thiserror::Error;
 
+use self::steal::StealModeConfig;
+
 pub mod steal;
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IncomingConfig {
     Mirror,
-    Steal,
+    Steal(StealModeConfig),
 }
 
 impl Default for IncomingConfig {
@@ -28,10 +30,10 @@ impl FromStr for IncomingConfig {
 
     fn from_str(val: &str) -> Result<Self, Self::Err> {
         match val.parse::<bool>() {
-            Ok(true) => Ok(IncomingConfig::Steal),
+            Ok(true) => Ok(IncomingConfig::Steal(StealModeConfig::disabled_config()?)),
             Ok(false) => Ok(IncomingConfig::Mirror),
             Err(_) => match val {
-                "steal" => Ok(IncomingConfig::Steal),
+                "steal" => Ok(IncomingConfig::Steal(StealModeConfig::disabled_config()?)),
                 "mirror" => Ok(IncomingConfig::Mirror),
                 _ => Err(IncomingConfigParseError),
             },
@@ -41,6 +43,6 @@ impl FromStr for IncomingConfig {
 
 impl IncomingConfig {
     pub fn is_steal(&self) -> bool {
-        self == &IncomingConfig::Steal
+        matches!(self, IncomingConfig::Steal(_))
     }
 }

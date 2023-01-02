@@ -156,6 +156,8 @@ impl Service<Request<Incoming>> for HyperHandler {
             .find_map(|header| {
                 self.filters.iter().find_map(|filter| {
                     // TODO(alex) [low] 2022-12-23: Remove the `header` unwrap.
+                    //
+                    // TODO(alex) [mid] 2023-01-02: Make the whole thing case-insensitive.
                     if filter.is_match(header.as_ref().unwrap()).unwrap() {
                         Some(*filter.key())
                     } else {

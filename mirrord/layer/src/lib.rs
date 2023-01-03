@@ -27,7 +27,7 @@ use hooks::HookManager;
 use libc::c_int;
 use mirrord_config::{
     fs::FsConfig,
-    incoming::{steal::StealModeConfig, IncomingConfig},
+    incoming::{steal::StealModeConfig, IncomingFileConfig},
     util::VecOrSingle,
     LayerConfig,
 };
@@ -422,14 +422,15 @@ async fn thread_loop(
     config: LayerConfig,
 ) {
     let is_steal = config.feature.network.incoming.is_steal();
-    let http_filter = if let IncomingConfig::Steal(steal_config) = config.feature.network.incoming {
-        match steal_config {
-            StealModeConfig::Simple => None,
-            StealModeConfig::Advanced(advanced) => advanced.filter,
-        }
-    } else {
-        None
-    };
+    let http_filter =
+        if let IncomingFileConfig::Steal(steal_config) = config.feature.network.incoming {
+            match steal_config {
+                StealModeConfig::Simple => None,
+                StealModeConfig::Advanced(advanced) => advanced.filter,
+            }
+        } else {
+            None
+        };
 
     let mut layer = Layer::new(tx, rx, is_steal, http_filter);
 

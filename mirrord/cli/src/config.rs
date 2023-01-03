@@ -66,7 +66,7 @@ impl ToString for FsMode {
         .args(&["target", "config_file"]),
 ))]
 pub(super) struct ExecArgs {
-    /// Target name to mirror.    
+    /// Target name to mirror.
     /// Target can either be a deployment or a pod.
     /// Valid formats: deployment/name, pod/name, pod/name/container/name
     #[arg(short = 't', long)]
@@ -141,10 +141,6 @@ pub(super) struct ExecArgs {
     /// Steal TCP instead of mirroring
     #[arg(long = "steal")]
     pub tcp_steal: bool,
-
-    /// A regex to filter http requests by. Steal only requests headers matching the regex.
-    #[arg(long)]
-    pub http_filter: Option<String>,
 
     /// Pause target container while running.
     #[arg(short, long, alias = "paws")]

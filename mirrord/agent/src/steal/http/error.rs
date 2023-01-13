@@ -19,4 +19,7 @@ pub enum HttpTrafficError {
 
     #[error("Failed with Captured `{0}`!")]
     ResponseReceiver(#[from] tokio::sync::oneshot::error::RecvError),
+
+    #[error("Failed with Elapsed `{0}`!")]
+    Timeout(#[from] tokio::time::error::Elapsed),
 }

@@ -1,10 +1,17 @@
+use core::time::Duration;
 use std::{net::SocketAddr, sync::Arc};
 
 use dashmap::DashMap;
 use fancy_regex::Regex;
+use futures::TryFutureExt;
 use hyper::server::conn::http1;
 use mirrord_protocol::ConnectionId;
-use tokio::{io::copy_bidirectional, net::TcpStream, sync::mpsc::Sender};
+use tokio::{
+    io::{copy_bidirectional, AsyncReadExt, DuplexStream},
+    net::TcpStream,
+    sync::mpsc::Sender,
+    time::timeout,
+};
 use tracing::error;
 
 use super::{
@@ -28,7 +35,7 @@ pub(super) const MINIMAL_HEADER_SIZE: usize = 10;
 #[derive(Debug)]
 pub(super) struct HttpFilterBuilder {
     http_version: HttpVersion,
-    reversible_stream: DefaultReversibleStream,
+    to_hyper_stream: DuplexStream,
     original_destination: SocketAddr,
     connection_id: ConnectionId,
     client_filters: Arc<DashMap<ClientId, Regex>>,
@@ -44,41 +51,46 @@ impl HttpFilterBuilder {
     /// Checks if the first available bytes in a stream could be of an http request.
     ///
     /// This is a best effort classification, not a guarantee that the stream is HTTP.
-    #[tracing::instrument(
-        level = "trace",
-        skip_all
-        fields(
-            local = ?stolen_stream.local_addr(),
-            peer = ?stolen_stream.peer_addr()
-        ),
-    )]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub(super) async fn new(
-        stolen_stream: TcpStream,
+        to_hyper_stream: DuplexStream,
         original_destination: SocketAddr,
         connection_id: ConnectionId,
         filters: Arc<DashMap<ClientId, Regex>>,
         matched_tx: Sender<HandlerHttpRequest>,
         connection_close_sender: Sender<ConnectionId>,
     ) -> Result<Self, HttpTrafficError> {
-        DefaultReversibleStream::read_header(stolen_stream)
-            .await
-            .map(|mut reversible_stream| {
-                let http_version = HttpVersion::new(
-                    reversible_stream.get_header(),
-                    &H2_PREFACE[..MINIMAL_HEADER_SIZE],
-                );
+        let (read_stream, write_stream) = tokio::io::split(to_hyper_stream);
 
-                Self {
-                    http_version,
-                    client_filters: filters,
-                    reversible_stream,
-                    original_destination,
-                    connection_id,
-                    matched_tx,
-                    connection_close_sender,
-                }
-            })
-            .inspect_err(|fail| error!("Something went wrong in http filter {fail:#?}"))
+        let (read_stream, read_buffer) = timeout(Duration::from_secs(10), async move {
+            let mut limited_read_stream = read_stream.take(MINIMAL_HEADER_SIZE as u64);
+            let mut minimal_read_buffer = [0; MINIMAL_HEADER_SIZE];
+
+            let mut total_read = 0;
+            while total_read < MINIMAL_HEADER_SIZE {
+                let amount = limited_read_stream.read(&mut minimal_read_buffer).await?;
+                total_read += amount;
+            }
+
+            let read_stream = limited_read_stream.into_inner();
+
+            Ok::<_, HttpTrafficError>((read_stream, minimal_read_buffer[..total_read].to_vec()))
+        })
+        .await??;
+
+        let http_version = HttpVersion::new(&read_buffer, &H2_PREFACE[..MINIMAL_HEADER_SIZE]);
+
+        let to_hyper_stream = read_stream.unsplit(write_stream);
+
+        Ok(Self {
+            http_version,
+            client_filters: filters,
+            to_hyper_stream,
+            original_destination,
+            connection_id,
+            matched_tx,
+            connection_close_sender,
+        })
     }
 
     /// Creates the hyper task, and returns an [`HttpFilter`] that contains the channels we use to
@@ -98,7 +110,7 @@ impl HttpFilterBuilder {
             http_version,
             client_filters,
             matched_tx,
-            mut reversible_stream,
+            mut to_hyper_stream,
             connection_id,
             original_destination,
             connection_close_sender,
@@ -113,7 +125,7 @@ impl HttpFilterBuilder {
                     let _res = http1::Builder::new()
                         .preserve_header_case(true)
                         .serve_connection(
-                            reversible_stream,
+                            to_hyper_stream,
                             HyperHandler {
                                 filters: client_filters,
                                 matched_tx,

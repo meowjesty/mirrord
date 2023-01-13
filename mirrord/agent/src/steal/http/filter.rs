@@ -46,6 +46,14 @@ pub(super) struct HttpFilterBuilder {
 }
 
 impl HttpFilterBuilder {
+    // TODO(alex) [high] 2023-01-13: We need to keep the bytes that we initially send to this
+    // `DuplexStream`, otherwise hyper would get a messed up packet (as we remove data from the
+    // stream here with read).
+    //
+    // And we need to re-send this data to the `hyper_stream` or the `passthrough_stream` somehow.
+    //
+    // Probably need a bit more fiddling to make this whole thing work.
+    //
     /// Does not consume bytes from the stream.
     ///
     /// Checks if the first available bytes in a stream could be of an http request.
@@ -68,7 +76,9 @@ impl HttpFilterBuilder {
 
             let mut total_read = 0;
             while total_read < MINIMAL_HEADER_SIZE {
-                let amount = limited_read_stream.read(&mut minimal_read_buffer).await?;
+                let amount = limited_read_stream
+                    .read(&mut minimal_read_buffer[total_read..])
+                    .await?;
                 total_read += amount;
             }
 

@@ -3,7 +3,11 @@ use std::{net::SocketAddr, sync::Arc};
 use dashmap::DashMap;
 use fancy_regex::Regex;
 use mirrord_protocol::ConnectionId;
-use tokio::{net::TcpStream, sync::mpsc::Sender};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, DuplexStream},
+    net::TcpStream,
+    sync::mpsc::Sender,
+};
 
 use self::{
     error::HttpTrafficError,
@@ -124,7 +128,7 @@ impl HttpFilterManager {
     #[tracing::instrument(level = "debug", skip(self, original_stream, connection_close_sender))]
     pub(super) async fn new_connection(
         &self,
-        original_stream: TcpStream,
+        original_stream: DuplexStream,
         original_address: SocketAddr,
         connection_id: ConnectionId,
         connection_close_sender: Sender<ConnectionId>,

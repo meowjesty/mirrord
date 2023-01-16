@@ -195,6 +195,10 @@ impl HttpFilterBuilder {
         let mut hyper_buffer = vec![0; 15000];
         let mut remote_buffer = vec![0; 15000];
 
+        // TODO(alex) [high] 2023-01-16: Now we need to keep track of where we are in these buffers,
+        // so that we can do the upgrade->passthrough case properly, as we need to re-send the bytes
+        // that hyper ate to detect the upgrade request.
+
         loop {
             select! {
                 read_from_hyper = stealer_stream.read(&mut hyper_buffer) => {

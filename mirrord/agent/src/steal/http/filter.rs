@@ -3,16 +3,17 @@ use std::{net::SocketAddr, sync::Arc};
 
 use dashmap::DashMap;
 use fancy_regex::Regex;
+use futures::TryFutureExt;
 use hyper::server::conn::http1;
 use mirrord_protocol::ConnectionId;
 use tokio::{
     io::{copy_bidirectional, duplex, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     select,
-    sync::mpsc::Sender,
+    sync::mpsc::{channel, Sender},
     time::timeout,
 };
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 use super::{error::HttpTrafficError, hyper_handler::HyperHandler, HttpVersion};
 use crate::{
@@ -80,6 +81,7 @@ impl HttpFilterTask {
                     let amount = limited_read_stream
                         .read(&mut minimal_read_buffer[total_read..])
                         .await?;
+
                     total_read += amount;
                 }
 
@@ -87,7 +89,9 @@ impl HttpFilterTask {
 
                 Ok::<_, HttpTrafficError>((read_stream, minimal_read_buffer[..total_read].to_vec()))
             })
-            .await??;
+            .inspect_err(|elapsed| warn!("Timed out waiting for data in HTTP check {elapsed:#?}"))
+            .await?
+            .inspect_err(|fail| warn!("Failed detecting HTTP traffic with {fail:#?}"))?;
 
         let http_version = HttpVersion::new(&read_buffer, &H2_PREFACE[..MINIMAL_HEADER_SIZE]);
 

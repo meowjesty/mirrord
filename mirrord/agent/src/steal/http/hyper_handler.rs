@@ -9,7 +9,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::{
     body::Incoming,
     client,
-    header::{UPGRADE},
+    header::UPGRADE,
     http::{self, request::Parts},
     service::Service,
     Request, Response, Version,

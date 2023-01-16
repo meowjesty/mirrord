@@ -194,7 +194,7 @@ impl HttpFilterTask {
         }
 
         // Send the bytes we took when checking for HTTP traffic.
-        stealer_stream.write(&stolen_bytes).await?;
+        stealer_stream.write_all(&stolen_bytes).await?;
 
         let mut hyper_buffer = vec![0; 15000];
         let mut remote_buffer = vec![0; 15000];
@@ -207,12 +207,12 @@ impl HttpFilterTask {
             select! {
                 read_from_hyper = stealer_stream.read(&mut hyper_buffer) => {
                     let read_amount = read_from_hyper?;
-                    stolen_connection.write(&hyper_buffer[..read_amount]).await?;
+                    stolen_connection.write_all(&hyper_buffer[..read_amount]).await?;
                 }
 
                 read_from_remote = stolen_connection.read(&mut remote_buffer) => {
                     let read_amount = read_from_remote?;
-                    stealer_stream.write(&remote_buffer[..read_amount]).await?;
+                    stealer_stream.write_all(&remote_buffer[..read_amount]).await?;
                 }
 
                 else => {
@@ -236,7 +236,7 @@ impl HttpFilterTask {
         let mut interceptor_to_original = TcpStream::connect(original_destination).await?;
 
         // Send the bytes we took when checking for HTTP traffic.
-        interceptor_to_original.write(&stolen_bytes).await?;
+        interceptor_to_original.write_all(&stolen_bytes).await?;
 
         copy_bidirectional(&mut stolen_connection, &mut interceptor_to_original).await?;
         Ok::<_, error::HttpTrafficError>(())

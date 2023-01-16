@@ -16,7 +16,7 @@ use mirrord_protocol::{
 };
 use streammap_ext::StreamMap;
 use tokio::{
-    io::{duplex, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
     sync::mpsc::{channel, Receiver, Sender},
 };

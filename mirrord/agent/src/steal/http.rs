@@ -3,15 +3,11 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use dashmap::DashMap;
 use fancy_regex::Regex;
 use mirrord_protocol::ConnectionId;
-use tokio::{
-    io::{duplex, AsyncRead, AsyncWrite, DuplexStream},
-    net::TcpStream,
-    sync::mpsc::Sender,
-};
+use tokio::{net::TcpStream, sync::mpsc::Sender};
 
 use self::{
     error::HttpTrafficError,
-    filter::{HttpFilterBuilder, MINIMAL_HEADER_SIZE},
+    filter::{HttpFilterTask, MINIMAL_HEADER_SIZE},
 };
 use crate::{steal::HandlerHttpRequest, util::ClientId};
 
@@ -131,7 +127,7 @@ impl HttpFilterManager {
         connection_id: ConnectionId,
         connection_close_sender: Sender<ConnectionId>,
     ) -> Result<(), HttpTrafficError> {
-        HttpFilterBuilder::new(
+        HttpFilterTask::new(
             original_stream,
             original_address,
             connection_id,

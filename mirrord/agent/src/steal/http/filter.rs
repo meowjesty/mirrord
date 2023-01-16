@@ -33,7 +33,7 @@ pub(super) const MINIMAL_HEADER_SIZE: usize = 10;
 
 /// Used to set up the creation of a [`HyperHandler`] task for the HTTP traffic stealer.
 #[derive(Debug)]
-pub(super) struct HttpFilterBuilder {
+pub(super) struct HttpFilterTask {
     http_version: HttpVersion,
     original_destination: SocketAddr,
     connection_id: ConnectionId,
@@ -46,7 +46,7 @@ pub(super) struct HttpFilterBuilder {
     stolen_bytes: Vec<u8>,
 }
 
-impl HttpFilterBuilder {
+impl HttpFilterTask {
     // TODO(alex) [high] 2023-01-13: We need to keep the bytes that we initially send to this
     // `DuplexStream`, otherwise hyper would get a messed up packet (as we remove data from the
     // stream here with read).

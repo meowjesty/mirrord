@@ -13,17 +13,16 @@ use tokio::{
     sync::mpsc::Sender,
     time::timeout,
 };
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
-use super::{
-    error::HttpTrafficError, hyper_handler::HyperHandler, DefaultReversibleStream, HttpVersion,
-};
+use super::{error::HttpTrafficError, hyper_handler::HyperHandler, HttpVersion};
 use crate::{
     steal::{http::error, HandlerHttpRequest},
     util::ClientId,
 };
 
 const H2_PREFACE: &[u8] = b"PRI * HTTP/2.0";
+const DEFAULT_HTTP_VERSION_DETECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Controls the amount of data we read when trying to detect if the stream's first message contains
 /// an HTTP request.
@@ -131,8 +130,13 @@ impl HttpFilterBuilder {
             // "executor" (just `tokio::spawn` in the `Builder::new` function is good enough), and
             // some more effort to chase some missing implementations.
             HttpVersion::V2 | HttpVersion::NotHttp => {
-                let _passhtrough_task =
-                    tokio::task::spawn(async move { self.steal_passthrough().await });
+                let _passhtrough_task = tokio::task::spawn(async move {
+                    self.steal_passthrough().await.inspect_err(|fail| {
+                        error!(
+                            "Something went wrong in the passthrough traffic handler!\n{fail:#?}"
+                        )
+                    })
+                });
 
                 Ok(())
             }

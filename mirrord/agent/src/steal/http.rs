@@ -12,16 +12,12 @@ use tokio::{
 use self::{
     error::HttpTrafficError,
     filter::{HttpFilterBuilder, MINIMAL_HEADER_SIZE},
-    reversible_stream::ReversibleStream,
 };
 use crate::{steal::HandlerHttpRequest, util::ClientId};
 
 pub(crate) mod error;
 pub(super) mod filter;
 mod hyper_handler;
-pub(super) mod reversible_stream;
-
-pub(super) type DefaultReversibleStream = ReversibleStream<MINIMAL_HEADER_SIZE>;
 
 /// Identifies a message as being HTTP or not.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,7 +38,9 @@ impl HttpVersion {
     fn new(buffer: &[u8], h2_preface: &[u8]) -> Self {
         let mut empty_headers = [httparse::EMPTY_HEADER; 0];
 
-        if buffer == h2_preface {
+        if buffer.len() < MINIMAL_HEADER_SIZE {
+            Self::NotHttp
+        } else if buffer == h2_preface {
             Self::V2
         } else if matches!(
             httparse::Request::new(&mut empty_headers).parse(buffer),
@@ -116,7 +114,7 @@ impl HttpFilterManager {
     //
     /// Starts a new hyper task if the `connection` contains a _valid-ish_ HTTP request.
     ///
-    /// The [`TcpStream`] itself os not what we feed hyper, instead we create a [`DuplexStream`],
+    /// The [`TcpStream`] itself is not what we feed hyper, instead we create a [`DuplexStream`],
     /// where one half (_server_) is where hyper does its magic, while the other half
     /// (_interceptor_) sends the bytes we get from the remote connection.
     ///

@@ -5,18 +5,18 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use fancy_regex::Regex;
 use futures::TryFutureExt;
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::{
     body::Incoming,
     client,
-    header::{SEC_WEBSOCKET_ACCEPT, UPGRADE},
-    http::{self, request::Parts, HeaderValue},
+    header::{UPGRADE},
+    http::{self, request::Parts},
     service::Service,
-    Request, Response, StatusCode, Version,
+    Request, Response, Version,
 };
 use mirrord_protocol::{ConnectionId, Port, RequestId};
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::{
         mpsc::Sender,
@@ -224,11 +224,11 @@ async fn upgrade_connection(
 
     // TODO(alex) [high] 2023-01-12: Use this to send the response from within the upgrade thread to
     // outside.
-    let (response_tx, response_rx) = oneshot::channel::<Response<Full<Bytes>>>();
+    let (_response_tx, response_rx) = oneshot::channel::<Response<Full<Bytes>>>();
 
     tokio::task::spawn(async move {
         match hyper::upgrade::on(request).await {
-            Ok(mut upgraded) => {
+            Ok(_upgraded) => {
                 info!("Time to upgrade in hyper!");
 
                 todo!();
@@ -270,7 +270,7 @@ impl Service<Request<Incoming>> for HyperHandler {
             // we send one ourselves?
             //
             // Need an image/pod that supports websocket upgrade.
-            if let Some(upgrade_to) = request.headers().get(UPGRADE).cloned() {
+            if let Some(_upgrade_to) = request.headers().get(UPGRADE).cloned() {
                 debug!("We have an upgrade request folks!");
                 let response = upgrade_connection(request, this.original_destination).await?;
                 debug!("after upgrade connection!");

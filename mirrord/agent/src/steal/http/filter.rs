@@ -3,17 +3,16 @@ use std::{net::SocketAddr, sync::Arc};
 
 use dashmap::DashMap;
 use fancy_regex::Regex;
-use futures::TryFutureExt;
 use hyper::server::conn::http1;
 use mirrord_protocol::ConnectionId;
 use tokio::{
-    io::{copy_bidirectional, duplex, AsyncReadExt, AsyncWriteExt, DuplexStream},
+    io::{copy_bidirectional, duplex, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     select,
     sync::mpsc::Sender,
     time::timeout,
 };
-use tracing::{error, info, trace};
+use tracing::{error, info};
 
 use super::{error::HttpTrafficError, hyper_handler::HyperHandler, HttpVersion};
 use crate::{
@@ -71,23 +70,24 @@ impl HttpFilterTask {
     ) -> Result<Self, HttpTrafficError> {
         let (read_stream, write_stream) = tokio::io::split(stolen_connection);
 
-        let (read_stream, read_buffer) = timeout(Duration::from_secs(10), async move {
-            let mut limited_read_stream = read_stream.take(MINIMAL_HEADER_SIZE as u64);
-            let mut minimal_read_buffer = [0; MINIMAL_HEADER_SIZE];
+        let (read_stream, read_buffer) =
+            timeout(DEFAULT_HTTP_VERSION_DETECTION_TIMEOUT, async move {
+                let mut limited_read_stream = read_stream.take(MINIMAL_HEADER_SIZE as u64);
+                let mut minimal_read_buffer = [0; MINIMAL_HEADER_SIZE];
 
-            let mut total_read = 0;
-            while total_read < MINIMAL_HEADER_SIZE {
-                let amount = limited_read_stream
-                    .read(&mut minimal_read_buffer[total_read..])
-                    .await?;
-                total_read += amount;
-            }
+                let mut total_read = 0;
+                while total_read < MINIMAL_HEADER_SIZE {
+                    let amount = limited_read_stream
+                        .read(&mut minimal_read_buffer[total_read..])
+                        .await?;
+                    total_read += amount;
+                }
 
-            let read_stream = limited_read_stream.into_inner();
+                let read_stream = limited_read_stream.into_inner();
 
-            Ok::<_, HttpTrafficError>((read_stream, minimal_read_buffer[..total_read].to_vec()))
-        })
-        .await??;
+                Ok::<_, HttpTrafficError>((read_stream, minimal_read_buffer[..total_read].to_vec()))
+            })
+            .await??;
 
         let http_version = HttpVersion::new(&read_buffer, &H2_PREFACE[..MINIMAL_HEADER_SIZE]);
 
@@ -147,7 +147,7 @@ impl HttpFilterTask {
         let Self {
             mut stolen_connection,
             stolen_bytes,
-            http_version,
+            http_version: _,
             client_filters,
             matched_tx,
             connection_id,
@@ -156,10 +156,10 @@ impl HttpFilterTask {
         } = self;
 
         let port = original_destination.port();
-        let (mut stealer_stream, mut hyper_stream) = duplex(15000);
+        let (mut stealer_stream, hyper_stream) = duplex(15000);
 
         // TODO: do we need to do something with this result?
-        let hyper_task = tokio::spawn(async move {
+        let _hyper_task = tokio::spawn(async move {
             let _ = http1::Builder::new()
                 .preserve_header_case(true)
                 .serve_connection(

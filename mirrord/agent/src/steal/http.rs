@@ -1,10 +1,10 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use dashmap::DashMap;
 use fancy_regex::Regex;
 use mirrord_protocol::ConnectionId;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, DuplexStream},
+    io::{duplex, AsyncRead, AsyncWrite, DuplexStream},
     net::TcpStream,
     sync::mpsc::Sender,
 };
@@ -125,10 +125,10 @@ impl HttpFilterManager {
     ///
     /// This mechanism is required to avoid having hyper send back [`Response`]s to the remote
     /// connection.
-    #[tracing::instrument(level = "debug", skip(self, original_stream, connection_close_sender))]
+    // #[tracing::instrument(level = "debug", skip(self, original_stream, connection_close_sender))]
     pub(super) async fn new_connection(
         &self,
-        original_stream: DuplexStream,
+        original_stream: TcpStream,
         original_address: SocketAddr,
         connection_id: ConnectionId,
         connection_close_sender: Sender<ConnectionId>,

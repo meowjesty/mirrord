@@ -16,7 +16,7 @@ use mirrord_protocol::{
 };
 use streammap_ext::StreamMap;
 use tokio::{
-    io::{AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{duplex, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
     sync::mpsc::{channel, Receiver, Sender},
 };
@@ -341,20 +341,21 @@ impl TcpConnectionStealer {
     ///
     /// Also creates an association between `connection_id` and `client_id` to be used by
     /// [`forward_incoming_tcp_data`].
-    #[tracing::instrument(level = "trace", skip(self))]
+    // #[tracing::instrument(level = "trace", skip(self))]
     async fn incoming_connection(
         &mut self,
-        (stream, address): (TcpStream, SocketAddr),
+        (original_stream, address): (TcpStream, SocketAddr),
     ) -> Result<()> {
-        let mut real_address = orig_dst::orig_dst_addr(&stream)?;
+        let mut real_address = orig_dst::orig_dst_addr(&original_stream)?;
         // If we use the original IP we would go through prerouting and hit a loop.
         // localhost should always work.
         real_address.set_ip(IpAddr::V4(Ipv4Addr::LOCALHOST));
+
         match self.port_subscriptions.get(&real_address.port()) {
             // We got an incoming connection in a port that is being stolen in its whole by a single
             // client.
             Some(Unfiltered(client_id)) => {
-                self.steal_connection(*client_id, address, real_address.port(), stream)
+                self.steal_connection(*client_id, address, real_address.port(), original_stream)
                     .await
             }
 
@@ -365,7 +366,7 @@ impl TcpConnectionStealer {
 
                 manager
                     .new_connection(
-                        stream,
+                        original_stream,
                         real_address,
                         connection_id,
                         self.http_connection_close_sender.clone(),

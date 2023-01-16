@@ -7,12 +7,13 @@ use futures::TryFutureExt;
 use hyper::server::conn::http1;
 use mirrord_protocol::ConnectionId;
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, DuplexStream},
+    io::{copy_bidirectional, duplex, AsyncReadExt, AsyncWriteExt, DuplexStream},
     net::TcpStream,
+    select,
     sync::mpsc::Sender,
     time::timeout,
 };
-use tracing::error;
+use tracing::{error, info};
 
 use super::{
     error::HttpTrafficError, hyper_handler::HyperHandler, DefaultReversibleStream, HttpVersion,
@@ -35,7 +36,6 @@ pub(super) const MINIMAL_HEADER_SIZE: usize = 10;
 #[derive(Debug)]
 pub(super) struct HttpFilterBuilder {
     http_version: HttpVersion,
-    to_hyper_stream: DuplexStream,
     original_destination: SocketAddr,
     connection_id: ConnectionId,
     client_filters: Arc<DashMap<ClientId, Regex>>,
@@ -43,6 +43,8 @@ pub(super) struct HttpFilterBuilder {
 
     /// For informing the stealer task that the connection was closed.
     connection_close_sender: Sender<ConnectionId>,
+    stolen_connection: TcpStream,
+    stolen_bytes: Vec<u8>,
 }
 
 impl HttpFilterBuilder {
@@ -59,16 +61,16 @@ impl HttpFilterBuilder {
     /// Checks if the first available bytes in a stream could be of an http request.
     ///
     /// This is a best effort classification, not a guarantee that the stream is HTTP.
-    #[tracing::instrument(level = "trace", skip_all)]
+    // #[tracing::instrument(level = "trace", skip_all)]
     pub(super) async fn new(
-        to_hyper_stream: DuplexStream,
+        stolen_connection: TcpStream,
         original_destination: SocketAddr,
         connection_id: ConnectionId,
         filters: Arc<DashMap<ClientId, Regex>>,
         matched_tx: Sender<HandlerHttpRequest>,
         connection_close_sender: Sender<ConnectionId>,
     ) -> Result<Self, HttpTrafficError> {
-        let (read_stream, write_stream) = tokio::io::split(to_hyper_stream);
+        let (read_stream, write_stream) = tokio::io::split(stolen_connection);
 
         let (read_stream, read_buffer) = timeout(Duration::from_secs(10), async move {
             let mut limited_read_stream = read_stream.take(MINIMAL_HEADER_SIZE as u64);
@@ -90,12 +92,16 @@ impl HttpFilterBuilder {
 
         let http_version = HttpVersion::new(&read_buffer, &H2_PREFACE[..MINIMAL_HEADER_SIZE]);
 
-        let to_hyper_stream = read_stream.unsplit(write_stream);
+        let stolen_connection = read_stream.unsplit(write_stream);
+
+        // TODO(alex) [high] 2023-01-16: Send the bytes we have to read to the `hyper_stream` after
+        // hyper handler is set up.
 
         Ok(Self {
+            stolen_connection,
+            stolen_bytes: read_buffer,
             http_version,
             client_filters: filters,
-            to_hyper_stream,
             original_destination,
             connection_id,
             matched_tx,
@@ -116,63 +122,115 @@ impl HttpFilterBuilder {
         )
     )]
     pub(super) fn start(self) -> Result<(), HttpTrafficError> {
-        let Self {
-            http_version,
-            client_filters,
-            matched_tx,
-            mut to_hyper_stream,
-            connection_id,
-            original_destination,
-            connection_close_sender,
-        } = self;
-
-        let port = original_destination.port();
-
-        match http_version {
+        match self.http_version {
             HttpVersion::V1 => {
-                tokio::task::spawn(async move {
-                    // TODO: do we need to do something with this result?
-                    let _res = http1::Builder::new()
-                        .preserve_header_case(true)
-                        .serve_connection(
-                            to_hyper_stream,
-                            HyperHandler {
-                                filters: client_filters,
-                                matched_tx,
-                                connection_id,
-                                port,
-                                original_destination,
-                                request_id: 0,
-                            },
-                        )
-                        .with_upgrades()
-                        .await;
-
-                    let _res = connection_close_sender
-                        .send(connection_id)
-                        .await
-                        .inspect_err(|connection_id| {
-                            error!("Main TcpConnectionStealer dropped connection close channel while HTTP filter is still running. \
-                            Cannot report the closing of connection {connection_id}.");
-                        });
-                });
+                tokio::task::spawn(async move { self.steal_http1().await });
                 Ok(())
             }
             // TODO(alex): hyper handling of HTTP/2 requires a bit more work, as it takes an
             // "executor" (just `tokio::spawn` in the `Builder::new` function is good enough), and
             // some more effort to chase some missing implementations.
             HttpVersion::V2 | HttpVersion::NotHttp => {
-                let _passhtrough_task = tokio::task::spawn(async move {
-                    let mut interceptor_to_original =
-                        TcpStream::connect(original_destination).await?;
-
-                    copy_bidirectional(&mut reversible_stream, &mut interceptor_to_original)
-                        .await?;
-                    Ok::<_, error::HttpTrafficError>(())
-                });
+                let _passhtrough_task =
+                    tokio::task::spawn(async move { self.steal_passthrough().await });
 
                 Ok(())
             }
         }
+    }
+
+    async fn steal_http1(self) -> Result<(), HttpTrafficError> {
+        let Self {
+            mut stolen_connection,
+            stolen_bytes,
+            http_version,
+            client_filters,
+            matched_tx,
+            connection_id,
+            original_destination,
+            connection_close_sender,
+        } = self;
+
+        let port = original_destination.port();
+        let (mut stealer_stream, mut hyper_stream) = duplex(15000);
+
+        // TODO: do we need to do something with this result?
+        let hyper_task = tokio::spawn(async move {
+            let _ = http1::Builder::new()
+                .preserve_header_case(true)
+                .serve_connection(
+                    hyper_stream,
+                    HyperHandler {
+                        filters: client_filters,
+                        matched_tx,
+                        connection_id,
+                        port,
+                        original_destination,
+                        request_id: 0,
+                    },
+                )
+                .with_upgrades()
+                .await;
+
+            connection_close_sender
+                            .send(connection_id)
+                            .await
+                            .inspect_err(|connection_id| {
+                                error!("Main TcpConnectionStealer dropped connection close channel while HTTP filter is still running. \
+                                Cannot report the closing of connection {connection_id}.");
+                            })?;
+
+            Ok::<_, HttpTrafficError>(())
+        });
+
+        {
+            {
+                {}
+            }
+        }
+
+        // Send the bytes we took when checking for HTTP traffic.
+        stealer_stream.write(&stolen_bytes).await?;
+
+        let mut hyper_buffer = vec![0; 15000];
+        let mut remote_buffer = vec![0; 15000];
+
+        loop {
+            select! {
+                read_from_hyper = stealer_stream.read(&mut hyper_buffer) => {
+                    let read_amount = read_from_hyper?;
+                    stolen_connection.write(&hyper_buffer[..read_amount]).await?;
+                }
+
+                read_from_remote = stolen_connection.read(&mut remote_buffer) => {
+                    let read_amount = read_from_remote?;
+                    stealer_stream.write(&remote_buffer[..read_amount]).await?;
+                }
+
+                else => {
+                    info!("How do we even get here?");
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn steal_passthrough(self) -> Result<(), HttpTrafficError> {
+        let Self {
+            mut stolen_connection,
+            stolen_bytes,
+            original_destination,
+            ..
+        } = self;
+
+        let mut interceptor_to_original = TcpStream::connect(original_destination).await?;
+
+        // Send the bytes we took when checking for HTTP traffic.
+        interceptor_to_original.write(&stolen_bytes).await?;
+
+        copy_bidirectional(&mut stolen_connection, &mut interceptor_to_original).await?;
+        Ok::<_, error::HttpTrafficError>(())
     }
 }

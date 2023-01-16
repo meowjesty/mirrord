@@ -5,11 +5,12 @@ use fancy_regex::Regex;
 use mirrord_protocol::ConnectionId;
 use tokio::{net::TcpStream, sync::mpsc::Sender};
 
-use self::{filter::MINIMAL_HEADER_SIZE, reversible_stream::ReversibleStream};
-use crate::{
-    steal::{http::filter::filter_task, HandlerHttpRequest},
-    util::ClientId,
+use self::{
+    error::HttpTrafficError,
+    filter::{HttpFilterBuilder, MINIMAL_HEADER_SIZE},
+    reversible_stream::ReversibleStream,
 };
+use crate::{steal::HandlerHttpRequest, util::ClientId};
 
 pub(crate) mod error;
 pub(super) mod filter;
@@ -110,15 +111,17 @@ impl HttpFilterManager {
         original_address: SocketAddr,
         connection_id: ConnectionId,
         connection_close_sender: Sender<ConnectionId>,
-    ) {
-        tokio::spawn(filter_task(
+    ) -> Result<(), HttpTrafficError> {
+        HttpFilterBuilder::new(
             original_stream,
             original_address,
             connection_id,
             self.client_filters.clone(),
             self.matched_tx.clone(),
             connection_close_sender,
-        ));
+        )
+        .await?
+        .start()
     }
 
     pub(super) fn is_empty(&self) -> bool {

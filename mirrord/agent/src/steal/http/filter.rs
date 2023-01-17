@@ -163,6 +163,13 @@ impl HttpFilterTask {
             connection_close_sender,
         } = self;
 
+        debug!(
+            "stolen_bytes {:#?} | connection_id {:#?} | original_destination {:#?}",
+            stolen_bytes.len(),
+            connection_id,
+            original_destination
+        );
+
         let port = original_destination.port();
         let (mut stealer_stream, hyper_stream) = duplex(15000);
 

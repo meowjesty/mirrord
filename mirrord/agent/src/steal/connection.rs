@@ -167,7 +167,7 @@ impl TcpConnectionStealer {
     /// connection.
     ///
     /// 6. Handling the cancellation of the whole stealer thread.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub(crate) async fn start(
         mut self,
         cancellation_token: CancellationToken,
@@ -225,7 +225,7 @@ impl TcpConnectionStealer {
     ///
     /// HttpFilter --> Stealer --> Layer --> Local App
     ///                        ^- You are here.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn forward_stolen_http_request(
         &mut self,
         request: Option<HandlerHttpRequest>,
@@ -256,7 +256,7 @@ impl TcpConnectionStealer {
     }
 
     /// Forwards data from a remote stream to the client with `connection_id`.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn forward_incoming_tcp_data(
         &mut self,
         connection_id: ConnectionId,
@@ -341,7 +341,7 @@ impl TcpConnectionStealer {
     ///
     /// Also creates an association between `connection_id` and `client_id` to be used by
     /// [`forward_incoming_tcp_data`].
-    // #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn incoming_connection(
         &mut self,
         (original_stream, address): (TcpStream, SocketAddr),
@@ -383,7 +383,7 @@ impl TcpConnectionStealer {
     }
 
     /// Registers a new layer instance that has the `steal` feature enabled.
-    #[tracing::instrument(level = "trace", skip(self, sender))]
+    #[tracing::instrument(level = "debug", skip(self, sender))]
     fn new_client(&mut self, client_id: ClientId, sender: Sender<DaemonTcp>) {
         self.clients.insert(client_id, sender);
     }
@@ -461,7 +461,7 @@ impl TcpConnectionStealer {
     ///
     /// Removes `port` from [`TcpConnectionStealer::iptables`] rules, and unsubscribes the layer
     /// with `client_id`.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     fn port_unsubscribe(&mut self, client_id: ClientId, port: Port) -> Result<(), AgentError> {
         let port_unsubscribed = match self.port_subscriptions.get_mut(&port) {
             Some(HttpFiltered(manager)) => {
@@ -488,6 +488,7 @@ impl TcpConnectionStealer {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     fn get_client_ports(&self, client_id: ClientId) -> Vec<Port> {
         self.port_subscriptions
             .iter()
@@ -502,7 +503,7 @@ impl TcpConnectionStealer {
     /// Removes the client with `client_id` from our list of clients (layers), and also removes
     /// their redirection rules from [`TcpConnectionStealer::iptables`] and all their open
     /// connections.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     fn close_client(&mut self, client_id: ClientId) -> Result<(), AgentError> {
         let ports = self.get_client_ports(client_id);
         for port in ports.iter() {
@@ -521,7 +522,7 @@ impl TcpConnectionStealer {
     }
 
     /// Sends a [`DaemonTcp`] message back to the client with `client_id`.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn send_message_to_single_client(
         &mut self,
         client_id: &ClientId,
@@ -561,7 +562,7 @@ impl TcpConnectionStealer {
     /// Local App --> Layer --> ClientConnectionHandler --> Stealer --> Browser
     ///                                                             ^- You are here.
     #[tracing::instrument(
-        level = "trace",
+        level = "debug",
         skip(self),
         fields(response_senders = ?self.http_response_senders.keys()),
     )]
@@ -598,7 +599,7 @@ impl TcpConnectionStealer {
     /// connection.
     /// Also remove connection from connection mappings and free the connection index.
     /// This method does not remove from client_connections so that it can be called while
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     fn remove_connection(&mut self, connection_id: ConnectionId) -> Option<ClientId> {
         self.write_streams.remove(&connection_id);
         self.read_streams.remove(&connection_id);
@@ -607,7 +608,7 @@ impl TcpConnectionStealer {
     }
 
     /// Close the connection, remove the id from all maps and free the id.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     fn connection_unsubscribe(&mut self, connection_id: ConnectionId) {
         if let Some(client_id) = self.remove_connection(connection_id) {
             // Remove the connection from the set of the connections that belong to its client.
@@ -626,7 +627,7 @@ impl TcpConnectionStealer {
     }
 
     /// Handles [`Command`]s that were received by [`TcpConnectionStealer::command_rx`].
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_command(&mut self, command: StealerCommand) -> Result<(), AgentError> {
         let StealerCommand { client_id, command } = command;
 

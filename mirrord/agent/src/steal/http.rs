@@ -119,7 +119,7 @@ impl HttpFilterManager {
     ///
     /// This mechanism is required to avoid having hyper send back [`Response`]s to the remote
     /// connection.
-    // #[tracing::instrument(level = "debug", skip(self, original_stream, connection_close_sender))]
+    #[tracing::instrument(level = "debug", skip(self, original_stream, connection_close_sender))]
     pub(super) async fn new_connection(
         &self,
         original_stream: TcpStream,

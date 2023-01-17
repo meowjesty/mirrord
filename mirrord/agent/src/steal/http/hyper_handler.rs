@@ -126,7 +126,7 @@ impl PartsExt for Parts {
 }
 
 /// Sends a [`MatchedHttpRequest`] through `tx` to be handled by the stealer -> layer.
-#[tracing::instrument(level = "trace", skip(matched_tx, response_rx))]
+#[tracing::instrument(level = "debug", skip(matched_tx, response_rx))]
 async fn matched_request(
     request: HandlerHttpRequest,
     matched_tx: Sender<HandlerHttpRequest>,
@@ -149,7 +149,7 @@ async fn matched_request(
 /// 1. Creates a [`hyper::client::conn::http1::Connection`] to the `original_destination`;
 /// 2. Sends the [`Request`] to it, and awaits a [`Response`];
 /// 3. Sends the [`HttpResponse`] back on the connected [`TcpStream`].
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug")]
 async fn unmatched_request(
     request: Request<Incoming>,
     original_destination: SocketAddr,

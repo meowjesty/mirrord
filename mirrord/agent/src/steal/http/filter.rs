@@ -60,7 +60,10 @@ impl HttpFilterTask {
     /// Checks if the first available bytes in a stream could be of an http request.
     ///
     /// This is a best effort classification, not a guarantee that the stream is HTTP.
-    // #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(stolen_connection, matched_tx, connection_close_sender)
+    )]
     pub(super) async fn new(
         stolen_connection: TcpStream,
         original_destination: SocketAddr,
@@ -147,6 +150,7 @@ impl HttpFilterTask {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn steal_http1(self) -> Result<(), HttpTrafficError> {
         let Self {
             mut stolen_connection,
@@ -229,6 +233,7 @@ impl HttpFilterTask {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn steal_passthrough(self) -> Result<(), HttpTrafficError> {
         let Self {
             mut stolen_connection,

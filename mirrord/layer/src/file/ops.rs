@@ -459,7 +459,7 @@ pub(crate) fn write(local_fd: RawFd, write_bytes: Option<Vec<u8>>) -> Detour<isi
 
     let writing_file = Write {
         remote_fd,
-        write_bytes: write_bytes.ok_or(Bypass::EmptyBuffer)?,
+        write_bytes: write_bytes.ok_or(Bypass::EmptyOption)?,
         start_from: 0,
         file_channel_tx,
     };

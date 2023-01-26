@@ -77,7 +77,6 @@ pub(crate) enum Bypass {
     IgnoredFile(PathBuf),
     RelativePath(PathBuf),
     ReadOnly(PathBuf),
-    EmptyBuffer,
     EmptyOption,
     NullNode,
     #[cfg(target_os = "macos")]

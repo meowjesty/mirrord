@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":[["IGNORE_ERROR_CODES",""]],"enum":[["HookError",""],["LayerError",""]],"fn":[["should_ignore",""]],"type":[["HookResult",""],["Result",""]]};

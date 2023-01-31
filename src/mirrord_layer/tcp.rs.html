@@ -195,7 +195,7 @@
 };
 
 <span class="attr">#[derive(Debug)]
-</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>HookMessageTcp {
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>TcpIncoming {
     Listen(Listen),
 }
 
@@ -280,11 +280,11 @@
     <span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, skip(<span class="self">self</span>, tx))]
     </span><span class="kw">async fn </span>handle_hook_message(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        message: HookMessageTcp,
+        message: TcpIncoming,
         tx: <span class="kw-2">&amp;</span>Sender&lt;ClientMessage&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), LayerError&gt; {
         <span class="kw">match </span>message {
-            HookMessageTcp::Listen(listen) =&gt; <span class="self">self</span>.handle_listen(listen, tx).<span class="kw">await</span>,
+            TcpIncoming::Listen(listen) =&gt; <span class="self">self</span>.handle_listen(listen, tx).<span class="kw">await</span>,
         }
     }
 

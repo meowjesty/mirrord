@@ -950,10 +950,10 @@
     <span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, skip(<span class="self">self</span>, tx))]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_hook_message(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        message: HookMessageFile,
+        message: FileOperation,
         tx: <span class="kw-2">&amp;</span>Sender&lt;ClientMessage&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        <span class="kw">use </span>HookMessageFile::<span class="kw-2">*</span>;
+        <span class="kw">use </span>FileOperation::<span class="kw-2">*</span>;
         <span class="kw">match </span>message {
             Open(open) =&gt; <span class="self">self</span>.handle_hook_open(open, tx).<span class="kw">await</span>,
             OpenRelative(open_relative) =&gt; <span class="self">self</span>.handle_hook_open_relative(open_relative, tx).<span class="kw">await</span>,
@@ -1392,7 +1392,7 @@
 }
 
 <span class="attr">#[derive(Debug)]
-</span><span class="kw">pub enum </span>HookMessageFile {
+</span><span class="kw">pub enum </span>FileOperation {
     Open(Open),
     OpenRelative(OpenRelative),
     Read(Read&lt;ReadFileResponse&gt;),

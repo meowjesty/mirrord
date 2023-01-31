@@ -5,8 +5,8 @@
 <p>Allows the user to set a filter (regex) for the HTTP headers, so that the stealer traffic
 feature only captures HTTP requests that match the specified filter, forwarding unmatched
 requests to their original destinations.</p>
-<p>Only does something when [<code>IncomingConfig</code>] is set as [<code>IncomingMode::Steal</code>], ignored
-otherwise.</p>
+<p>Only does something when <a href="../struct.IncomingConfig.html"><code>IncomingConfig</code></a> is set as
+<a href="../enum.IncomingMode.html#variant.Steal"><code>IncomingMode::Steal</code></a>, ignored otherwise.</p>
 </div></details><h2 id="fields" class="fields small-section-header">Fields<a href="#fields" class="anchor"></a></h2><span id="structfield.filter" class="structfield small-section-header"><a href="#structfield.filter" class="anchor field"></a><code>filter: <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;</code></span><div class="docblock"><p>Used to match against the requests captured by the mirrord-agent pod.</p>
 <p>Supports regexes validated by the
 <a href="https://docs.rs/fancy-regex/latest/fancy_regex/"><code>fancy-regex</code></a> crate.</p>

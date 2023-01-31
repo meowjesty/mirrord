@@ -452,40 +452,6 @@
 <a href="#452" id="452">452</a>
 <a href="#453" id="453">453</a>
 <a href="#454" id="454">454</a>
-<a href="#455" id="455">455</a>
-<a href="#456" id="456">456</a>
-<a href="#457" id="457">457</a>
-<a href="#458" id="458">458</a>
-<a href="#459" id="459">459</a>
-<a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a>
-<a href="#462" id="462">462</a>
-<a href="#463" id="463">463</a>
-<a href="#464" id="464">464</a>
-<a href="#465" id="465">465</a>
-<a href="#466" id="466">466</a>
-<a href="#467" id="467">467</a>
-<a href="#468" id="468">468</a>
-<a href="#469" id="469">469</a>
-<a href="#470" id="470">470</a>
-<a href="#471" id="471">471</a>
-<a href="#472" id="472">472</a>
-<a href="#473" id="473">473</a>
-<a href="#474" id="474">474</a>
-<a href="#475" id="475">475</a>
-<a href="#476" id="476">476</a>
-<a href="#477" id="477">477</a>
-<a href="#478" id="478">478</a>
-<a href="#479" id="479">479</a>
-<a href="#480" id="480">480</a>
-<a href="#481" id="481">481</a>
-<a href="#482" id="482">482</a>
-<a href="#483" id="483">483</a>
-<a href="#484" id="484">484</a>
-<a href="#485" id="485">485</a>
-<a href="#486" id="486">486</a>
-<a href="#487" id="487">487</a>
-<a href="#488" id="488">488</a>
 </pre><pre class="rust"><code><span class="attr">#![cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
 </span><span class="kw">mod </span>codesign;
 <span class="kw">mod </span>error;
@@ -494,7 +460,6 @@
 <span class="kw">mod </span>main {
     <span class="kw">use </span>std::{
         collections::HashSet,
-        env,
         env::temp_dir,
         io::{<span class="self">self</span>, Read},
         os::{macos::fs::MetadataExt, unix::fs::PermissionsExt},
@@ -516,8 +481,8 @@
         SipError::{CyclicShebangs, FileNotFound, UnlikelyError},
     };
 
-    <span class="kw">const </span>EXCLUDE_ENV_VAR_NAME: <span class="kw-2">&amp;</span>str = <span class="string">&quot;MIRRORD_FILE_FILTER_EXCLUDE&quot;</span>;
-    <span class="kw">pub const </span>TMP_DIR_ENV_VAR_NAME: <span class="kw-2">&amp;</span>str = <span class="string">&quot;MIRRORD_TMP_DIR&quot;</span>;
+    <span class="doccomment">/// Where patched files are stored, relative to the temp dir (`/tmp/mirrord-bin/...`).
+    </span><span class="kw">pub const </span>MIRRORD_PATCH_DIR: <span class="kw-2">&amp;</span>str = <span class="string">&quot;mirrord-bin&quot;</span>;
 
     <span class="kw">fn </span>is_fat_x64_arch(arch: &amp;&amp;<span class="kw">impl </span>FatArch) -&gt; bool {
         <span class="macro">matches!</span>(arch.architecture(), Architecture::X86_64)
@@ -797,51 +762,18 @@
         }
     }
 
-    <span class="doccomment">/// Add the given `path` to excluded paths.
-    </span><span class="kw">fn </span>add_to_file_exclude(path: <span class="kw-2">&amp;</span>str) {
-        env::set_var(
-            EXCLUDE_ENV_VAR_NAME,
-            env::var(EXCLUDE_ENV_VAR_NAME)
-                .map(|paths| paths + <span class="string">&quot;;&quot;</span>)
-                .unwrap_or_else(|<span class="kw">_</span>| String::new())
-                + path,
-        )
-    }
-
-    <span class="doccomment">/// Get a path to a temp dir that is excluded from FS hooks and is also saved in an env var so
-    /// that child processes also use the same one and exclude it from FS hooks.
-    </span><span class="kw">pub fn </span>get_tmp_dir() -&gt; <span class="prelude-ty">Result</span>&lt;PathBuf&gt; {
-        env::var(TMP_DIR_ENV_VAR_NAME)
-            .map(PathBuf::from)
-            .or_else(|_err| {
-                <span class="kw">let </span>tmp_dir = temp_dir().join(<span class="string">&quot;mirrord-bin&quot;</span>);
-                <span class="kw">let </span>tmp_dir_string = tmp_dir
-                    .to_str()
-                    .ok_or_else(|| UnlikelyError(<span class="string">&quot;Failed to convert path to string&quot;</span>.to_string()))<span class="question-mark">?
-                    </span>.to_string();
-                env::set_var(TMP_DIR_ENV_VAR_NAME, <span class="kw-2">&amp;</span>tmp_dir_string);
-                add_to_file_exclude(<span class="kw-2">&amp;</span>(tmp_dir_string + <span class="string">&quot;/.*$&quot;</span>));
-                <span class="prelude-val">Ok</span>(tmp_dir)
-            })
-    }
-
     <span class="doccomment">/// Check if the file that the user wants to execute is a SIP protected binary (or a script
     /// starting with a shebang that leads to a SIP protected binary).
     /// If it is, create a non-protected version of the file and return `Ok(Some(patched_path)`.
     /// If it is not, `Ok(None)`.
     /// Propagate errors.
     </span><span class="kw">pub fn </span>sip_patch(binary_path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; {
-        <span class="comment">// Important: do also if the binary has no SIP, so that a temp directory is set, added to
-        // ignored files, and saved in an environment variable, so that if the binary execs SIP
-        // binaries the patched versions are created in a directory that is already added to the
-        // excluded files. (It&#39;s currently not possible to add excluded paths when the layer is
-        // already running, and the first call to this function is from the cli.)
-        </span><span class="kw">let </span>tmp_dir = get_tmp_dir()<span class="question-mark">?</span>;
-
         <span class="kw">if let </span>SipStatus::SomeSIP(path, shebang_target) = get_sip_status(binary_path)<span class="question-mark">? </span>{
+            <span class="kw">let </span>tmp_dir = temp_dir().join(MIRRORD_PATCH_DIR);
             <span class="macro">trace!</span>(<span class="string">&quot;Using temp dir: {:?} for sip patches&quot;</span>, <span class="kw-2">&amp;</span>tmp_dir);
             <span class="prelude-val">Some</span>(patch_some_sip(<span class="kw-2">&amp;</span>path, shebang_target, tmp_dir)).transpose()
         } <span class="kw">else </span>{
+            <span class="macro">trace!</span>(<span class="string">&quot;No SIP detected on {:?}&quot;</span>, binary_path);
             <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
         }
     }

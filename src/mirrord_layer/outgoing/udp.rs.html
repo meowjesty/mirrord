@@ -321,6 +321,8 @@
 <a href="#321" id="321">321</a>
 <a href="#322" id="322">322</a>
 <a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::{
     collections::HashMap,
     future::Future,
@@ -346,6 +348,8 @@
 <span class="kw">use crate</span>::{common::ResponseDeque, detour::DetourGuard, error::LayerError};
 
 <span class="doccomment">/// Hook messages handled by `TcpOutgoingHandler`.
+///
+/// - Part of [`HookMessage`](crate::common::HookMessage).
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>UdpOutgoing {
     Connect(Connect),

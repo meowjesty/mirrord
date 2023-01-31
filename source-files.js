@@ -147,7 +147,7 @@ var sourcesIndex = JSON.parse('{\
 "mirrord_config_derive":["",[["config",[],["field.rs","flag.rs"]]],["config.rs","lib.rs"]],\
 "mirrord_console":["",[],["error.rs","lib.rs","logger.rs","protocol.rs"]],\
 "mirrord_kube":["",[["api",[],["container.rs","env_guard.rs","kubernetes.rs","runtime.rs"]]],["api.rs","error.rs","lib.rs"]],\
-"mirrord_layer":["",[["file",[],["filter.rs","hooks.rs","ops.rs"]],["outgoing",[],["tcp.rs","udp.rs"]],["socket",[],["hooks.rs","ops.rs"]],["tcp_steal",[],["http_forwarding.rs"]]],["common.rs","connection.rs","detour.rs","error.rs","file.rs","go_hooks.rs","hooks.rs","lib.rs","macros.rs","outgoing.rs","socket.rs","tcp.rs","tcp_mirror.rs","tcp_steal.rs","tracing_util.rs"]],\
+"mirrord_layer":["",[["file",[],["filter.rs","hooks.rs","ops.rs"]],["outgoing",[],["tcp.rs","udp.rs"]],["socket",[],["hooks.rs","ops.rs"]],["tcp_steal",[],["http_forwarding.rs"]]],["common.rs","connection.rs","detour.rs","dns.rs","error.rs","file.rs","go_hooks.rs","hooks.rs","lib.rs","macros.rs","outgoing.rs","socket.rs","tcp.rs","tcp_mirror.rs","tcp_steal.rs","tracing_util.rs"]],\
 "mirrord_layer_macro":["",[],["lib.rs"]],\
 "mirrord_operator":["",[],["client.rs","crd.rs","lib.rs","license.rs","setup.rs"]],\
 "mirrord_progress":["",[],["lib.rs"]],\

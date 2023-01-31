@@ -235,7 +235,7 @@
 }
 
 <span class="kw">impl </span>ConfigField {
-    <span class="doccomment">/// Check if field is Option&lt;T&gt; and if so return type of T
+    <span class="doccomment">/// Check if field is `Option&lt;T&gt;` and if so return type of `T`
     </span><span class="kw">fn </span>is_option(field: <span class="kw-2">&amp;</span>Field) -&gt; <span class="prelude-ty">Option</span>&lt;Type&gt; {
         <span class="kw">let </span>seg = <span class="kw">if let </span>Type::Path(ty) = <span class="kw-2">&amp;</span>field.ty {
             ty.path.segments.first()

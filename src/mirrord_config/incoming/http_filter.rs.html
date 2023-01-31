@@ -108,8 +108,8 @@
 /// feature only captures HTTP requests that match the specified filter, forwarding unmatched
 /// requests to their original destinations.
 ///
-/// Only does something when [`IncomingConfig`] is set as [`IncomingMode::Steal`], ignored
-/// otherwise.
+/// Only does something when [`IncomingConfig`](super::IncomingConfig) is set as
+/// [`IncomingMode::Steal`](super::IncomingMode::Steal), ignored otherwise.
 </span><span class="attr">#[derive(MirrordConfig, Default, PartialEq, Eq, Clone, Debug)]
 #[config(map_to = <span class="string">&quot;HttpHeaderFilterFileConfig&quot;</span>, derive = <span class="string">&quot;JsonSchema&quot;</span>)]
 #[cfg_attr(test, config(derive = <span class="string">&quot;PartialEq, Eq&quot;</span>))]

@@ -268,9 +268,27 @@
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
 <a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::{env::VarError, ptr, str::ParseBoolError};
 
 <span class="kw">use </span>errno::set_errno;
+<span class="kw">use </span>ignore_codes::<span class="kw-2">*</span>;
 <span class="kw">use </span>libc::{c_char, DIR, FILE};
 <span class="kw">use </span>mirrord_config::config::ConfigError;
 <span class="kw">use </span>mirrord_kube::error::KubeApiError;
@@ -284,17 +302,28 @@
 <span class="kw">use </span><span class="kw">super</span>::HookMessage;
 <span class="kw">use </span><span class="kw">crate</span>::tcp_steal::http_forwarding::HttpForwarderError;
 
-<span class="kw">const </span>IGNORE_ERROR_CODES: [i32; <span class="number">2</span>] = [libc::EINPROGRESS, libc::EAFNOSUPPORT];
+<span class="doccomment">/// Private module for preventing access to the [`IGNORE_ERROR_CODES`] constant.
+</span><span class="kw">mod </span>ignore_codes {
+    <span class="doccomment">/// Error codes from [`libc`] that are **not** hard errors, meaning the operation may progress.
+    ///
+    /// Prefer using [`is_ignored_code`] instead of relying on this constant.
+    </span><span class="kw">const </span>IGNORE_ERROR_CODES: [i32; <span class="number">2</span>] = [libc::EINPROGRESS, libc::EAFNOSUPPORT];
 
-<span class="kw">fn </span>should_ignore(code: <span class="prelude-ty">Option</span>&lt;i32&gt;) -&gt; bool {
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(code) = code {
-        IGNORE_ERROR_CODES.contains(<span class="kw-2">&amp;</span>code)
-    } <span class="kw">else </span>{
-        <span class="bool-val">false
-    </span>}
+    <span class="doccomment">/// Checks if an error code from some [`libc`] function should be treated as a hard error, or
+    /// not.
+    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>is_ignored_code(code: <span class="prelude-ty">Option</span>&lt;i32&gt;) -&gt; bool {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(code) = code {
+            IGNORE_ERROR_CODES.contains(<span class="kw-2">&amp;</span>code)
+        } <span class="kw">else </span>{
+            <span class="bool-val">false
+        </span>}
+    }
 }
 
-<span class="attr">#[derive(Error, Debug)]
+<span class="doccomment">/// Errors that occur in the layer&#39;s hook functions, and will reach the user&#39;s application.
+///
+/// These errors are converted to [`libc`] error codes, and are also used to [`set_errno`].
+</span><span class="attr">#[derive(Error, Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>HookError {
     <span class="attr">#[error(<span class="string">&quot;mirrord-layer: Failed while getting a response!&quot;</span>)]
     </span>ResponseError(<span class="attr">#[from] </span>ResponseError),
@@ -337,7 +366,12 @@
     </span>FailedSipPatch(<span class="attr">#[from] </span>SipError),
 }
 
-<span class="attr">#[derive(Error, Debug)]
+<span class="doccomment">/// Errors internal to mirrord-layer.
+///
+/// You&#39;ll encounter these when the layer is performing some of its internal operations (mostly when
+/// handling messsages, like [`HookMessage`], or
+/// [`DaemonMessage`](mirrord_protocol::codec::DaemonMessage)).
+</span><span class="attr">#[derive(Error, Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>LayerError {
     <span class="attr">#[error(<span class="string">&quot;mirrord-layer: Failed while getting a response!&quot;</span>)]
     </span>ResponseError(<span class="attr">#[from] </span>ResponseError),
@@ -425,7 +459,7 @@
     </span>AgentErrorClosed(String),
 }
 
-<span class="comment">// Cannot have a generic From&lt;T&gt; implementation for this error, so explicitly implemented here.
+<span class="comment">// Cannot have a generic `From&lt;T&gt;` implementation for this error, so explicitly implemented here.
 </span><span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>, T&gt; From&lt;std::sync::PoisonError&lt;std::sync::MutexGuard&lt;<span class="lifetime">&#39;a</span>, T&gt;&gt;&gt; <span class="kw">for </span>HookError {
     <span class="kw">fn </span>from(<span class="kw">_</span>: std::sync::PoisonError&lt;std::sync::MutexGuard&lt;T&gt;&gt;) -&gt; <span class="self">Self </span>{
         HookError::LockError
@@ -446,7 +480,7 @@
             | HookError::ResponseError(ResponseError::RemoteIO(<span class="kw">_</span>)) =&gt; {
                 <span class="macro">info!</span>(<span class="string">&quot;libc error (doesn&#39;t indicate a problem) &gt;&gt; {:#?}&quot;</span>, fail)
             }
-            HookError::IO(<span class="kw-2">ref </span>e) <span class="kw">if </span>(should_ignore(e.raw_os_error())) =&gt; {
+            HookError::IO(<span class="kw-2">ref </span>e) <span class="kw">if </span>(is_ignored_code(e.raw_os_error())) =&gt; {
                 <span class="macro">info!</span>(<span class="string">&quot;libc error (doesn&#39;t indicate a problem) &gt;&gt; {:#?}&quot;</span>, fail)
             }
             <span class="kw">_ </span>=&gt; <span class="macro">error!</span>(<span class="string">&quot;Error occured in Layer &gt;&gt; {:?}&quot;</span>, fail),

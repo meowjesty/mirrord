@@ -127,10 +127,13 @@
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
 <a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
 </pre><pre class="rust"><code><span class="doccomment">//! Module for the mirrord-layer/mirrord-agent connection mechanism.
 //!
-//! The layer will either start a new agent pod with [`KubernetesAPI`], directly connect (for tests)
-//! to an existing agent, or let the [`OperatorApi`] handles the connection.
+//! The layer will either start a new agent pod with [`KubernetesAPI`], directly connect to an
+//! existing agent (currently only used for tests), or let the [`OperatorApi`] handle the
+//! connection.
 </span><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use </span>mirrord_config::LayerConfig;
@@ -158,11 +161,11 @@ mirrord-layer failed while trying to establish connection with the agent pod!
 
 &gt;&gt; Check that you&#39;re using the correct kubernetes credentials (and configuration).
 
-&gt;&gt; Check your kubernetes context match where the agent should be spawned.
+&gt;&gt; Check your kubernetes&#39; context matches where the agent should be spawned.
 &quot;#</span>;
 
-<span class="doccomment">/// Handles a [`KubeApiError`] by priting what went wrong to the user, and closing the  program with
-/// [`graceful_exit`].
+<span class="doccomment">/// Handles a [`KubeApiError`] by printing what went wrong to the user, and closing the  program
+/// with [`graceful_exit`].
 ///
 /// Used in [`connect`], as we treat every error there as fatal.
 </span><span class="kw">fn </span>handle_error(err: KubeApiError, config: <span class="kw-2">&amp;</span>LayerConfig) -&gt; ! {
@@ -185,7 +188,7 @@ mirrord-layer failed while trying to establish connection with the agent pod!
 <span class="doccomment">/// Calls [`graceful_exit`] when we have an [`OperatorApiError`].
 ///
 /// Used in [`connect`] (same as [`handle_error`]), but only when `LayerConfig::operator` is
-/// set to `true`.
+/// set to `true` and an operator is installed in the cluster.
 </span><span class="kw">fn </span>handle_operator_error(err: OperatorApiError) -&gt; ! {
     <span class="macro">graceful_exit!</span>(<span class="string">&quot;{FAIL_CREATE_AGENT}{FAIL_STILL_STUCK} with error {err}&quot;</span>)
 }
@@ -196,15 +199,16 @@ mirrord-layer failed while trying to establish connection with the agent pod!
 ///
 /// ## Direct connection
 ///
-/// There is support for connecting directly to a pod (instead of going through
-/// `KubernetesAPI::create` by setting `LayerConfig::connect_tcp`.
+/// There is support for connecting directly to an existing pod (instead of going through
+/// `KubernetesAPI::create`) by setting `LayerConfig::connect_tcp`.
 ///
 /// This is used for mirrord tests only.
 ///
 /// ## Operator
 ///
 /// The [`OperatorApi`] takes over the connection procedure if `LayerConfig::operator` is
-/// set to `true`. We use `OperatorApi::discover` instead of [`KubernetesAPI`].
+/// set to `true` and an operator is installed in the cluster. We use `OperatorApi::discover`
+/// instead of [`KubernetesAPI`].
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>connect(
     config: <span class="kw-2">&amp;</span>LayerConfig,
 ) -&gt; (Sender&lt;ClientMessage&gt;, Receiver&lt;DaemonMessage&gt;) {

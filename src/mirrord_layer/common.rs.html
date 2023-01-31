@@ -81,22 +81,18 @@
 <a href="#81" id="81">81</a>
 <a href="#82" id="82">82</a>
 <a href="#83" id="83">83</a>
-<a href="#84" id="84">84</a>
-<a href="#85" id="85">85</a>
-<a href="#86" id="86">86</a>
-<a href="#87" id="87">87</a>
-<a href="#88" id="88">88</a>
-</pre><pre class="rust"><code><span class="doccomment">//! Shared place for a few types and functions that are used everywhere by layer.
+</pre><pre class="rust"><code><span class="doccomment">//! Shared place for a few types and functions that are used everywhere by the layer.
 </span><span class="kw">use </span>std::collections::VecDeque;
 
-<span class="kw">use </span>mirrord_protocol::{dns::DnsLookup, RemoteResult};
+<span class="kw">use </span>mirrord_protocol::RemoteResult;
 <span class="kw">use </span>tokio::sync::oneshot;
 
 <span class="kw">use crate</span>::{
+    dns::GetAddrInfo,
     error::{HookError, HookResult},
-    file::HookMessageFile,
+    file::FileOperation,
     outgoing::{tcp::TcpOutgoing, udp::UdpOutgoing},
-    tcp::HookMessageTcp,
+    tcp::TcpIncoming,
     HOOK_SENDER,
 };
 
@@ -104,9 +100,10 @@
 ///
 /// ## Usage
 ///
-/// Most mirrord features that interact with the agent use this type to keep a queue of the
-/// operations, keeping them in order, and allowing us to match a hook request to a response. It&#39;s
-/// done in this way due to us not having identifiers for the hook requests.
+/// We have no identifiers for the hook requests, so if hook responses were sent asynchronously we
+/// would have no way to match them back to their requests. However, requests are sent out
+/// synchronously, and responses are sent back synchronously, so keeping them in order is how we
+/// maintain our way to match them.
 ///
 /// - The usual flow is:
 ///
@@ -117,7 +114,16 @@
 ///     2. `Sender::send` the result back to the operation that initiated the request.
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">type </span>ResponseDeque&lt;T&gt; = VecDeque&lt;ResponseChannel&lt;T&gt;&gt;;
 
-<span class="doccomment">/// Sends a [`HookMessage`] through the global [`HOOK_SENDER`].
+<span class="doccomment">/// Type alias for the channel that sends a response from the agent.
+///
+/// See [`ResponseDeque`] for usage details.
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">type </span>ResponseChannel&lt;T&gt; = oneshot::Sender&lt;RemoteResult&lt;T&gt;&gt;;
+
+<span class="doccomment">/// Sends a [`HookMessage`] through the global [`HOOK_SENDER`] channel.
+///
+/// ## Flow
+///
+/// hook function -&gt; [`HookMessage`] -&gt; [`blocking_send_hook_message`] -&gt; [`ClientMessage`]
 ///
 /// ## Usage
 ///
@@ -125,6 +131,8 @@
 ///   function is extensively used there;
 ///
 /// - [`socket::ops`](crate::socket::ops): used by some functions that are _blocking-ish_.
+///
+/// [`ClientMessage`]: mirrord_protocol::codec::ClientMessage
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>blocking_send_hook_message(message: HookMessage) -&gt; HookResult&lt;()&gt; {
     HOOK_SENDER
         .get()
@@ -132,35 +140,17 @@
         .and_then(|hook_sender| hook_sender.blocking_send(message).map_err(Into::into))
 }
 
-<span class="doccomment">/// Type alias for the channel that sends a response from the agent.
-///
-/// See [`ResponseDeque`] for usage details.
-</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">type </span>ResponseChannel&lt;T&gt; = oneshot::Sender&lt;RemoteResult&lt;T&gt;&gt;;
-
-<span class="doccomment">/// Hook message for the `socket::getaddrinfo` operation.
-///
-/// Used to perform a DNS lookup in the agent context.
-</span><span class="attr">#[derive(Debug)]
-</span><span class="kw">pub struct </span>GetAddrInfoHook {
-    <span class="doccomment">/// Host name, or host address.
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) node: String,
-
-    <span class="doccomment">/// [`ResponseChannel`] used to send a [`DnsLookup`] response from the agent back to
-    /// `socket::getaddrinfo`.
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) hook_channel_tx: ResponseChannel&lt;DnsLookup&gt;,
-}
-
 <span class="doccomment">/// These messages are handled internally by the layer, and become `ClientMessage`s sent to
 /// the agent.
 ///
-/// Most layer operations will send a [`HookMessage`] that will be converted to an equivalent
+/// Most hook detours will send a [`HookMessage`] that will be converted to an equivalent
 /// `ClientMessage` after some internal handling is done. Usually this means taking a sender
 /// channel from this message, and pushing it into a [`ResponseDeque`], while taking the other
 /// fields of the message to become a `ClientMessage`.
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>HookMessage {
-    <span class="doccomment">/// TCP incoming messages originating from a hook, see [`HookMessageTcp`].
-    </span>Tcp(HookMessageTcp),
+    <span class="doccomment">/// TCP incoming messages originating from a hook, see [`TcpIncoming`].
+    </span>Tcp(TcpIncoming),
 
     <span class="doccomment">/// TCP outgoing messages originating from a hook, see [`TcpOutgoing`].
     </span>TcpOutgoing(TcpOutgoing),
@@ -168,11 +158,11 @@
     <span class="doccomment">/// UDP outgoing messages originating from a hook, see [`UdpOutgoing`].
     </span>UdpOutgoing(UdpOutgoing),
 
-    <span class="doccomment">/// File messages originating from a hook, see [`HookMessageFile`].
-    </span>File(HookMessageFile),
+    <span class="doccomment">/// File messages originating from a hook, see [`FileOperation`].
+    </span>File(FileOperation),
 
-    <span class="doccomment">/// Message originating from `getaddrinfo`, see [`GetAddrInfoHook`].
-    </span>GetAddrInfoHook(GetAddrInfoHook),
+    <span class="doccomment">/// Message originating from `getaddrinfo`, see [`GetAddrInfo`].
+    </span>GetAddrinfo(GetAddrInfo),
 }
 </code></pre></div>
 </section></div></main><div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="mirrord_layer" data-themes="" data-resource-suffix="" data-rustdoc-version="1.67.0-nightly (c5d82ed7a 2022-11-19)" data-search-js="search-df80cc3cb87b6482.js" data-settings-js="settings-7e1cf5cc683233f7.js" data-settings-css="settings-af96d9e2fc13e081.css" ></div></body></html>

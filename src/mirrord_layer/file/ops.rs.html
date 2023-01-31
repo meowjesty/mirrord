@@ -610,7 +610,7 @@
         <span class="macro">trace!</span>(<span class="string">&quot;dropping RemoteFile {self:?}&quot;</span>);
         <span class="kw">let </span>closing_file = Close { fd: <span class="self">self</span>.fd };
 
-        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = blocking_send_file_message(HookMessageFile::Close(closing_file)) {
+        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = blocking_send_file_message(FileOperation::Close(closing_file)) {
             <span class="macro">warn!</span>(<span class="string">&quot;Failed to send close file {self:?} message: {err:?}&quot;</span>);
         };
     }
@@ -674,11 +674,11 @@
 </span><span class="kw">fn </span>close_remote_file_on_failure(fd: u64) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">error!</span>(<span class="string">&quot;Call to `libc::shm_open` resulted in an error, closing the file remotely!&quot;</span>);
 
-    blocking_send_file_message(HookMessageFile::Close(Close { fd }))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Close(Close { fd }))<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">fn </span>blocking_send_file_message(message: HookMessageFile) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<span class="kw">fn </span>blocking_send_file_message(message: FileOperation) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     blocking_send_hook_message(HookMessage::File(message))
 }
 
@@ -735,7 +735,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Open(requesting_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Open(requesting_file))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>OpenFileResponse { fd: remote_fd } = file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
 
@@ -829,7 +829,7 @@
         dir_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::FdOpenDir(open_dir_request))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::FdOpenDir(open_dir_request))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>OpenDirResponse { fd: remote_dir_fd } = dir_channel_rx.blocking_recv()<span class="question-mark">??</span>;
 
@@ -860,7 +860,7 @@
         dir_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::ReadDir(requesting_dir))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::ReadDir(requesting_dir))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>ReadDirResponse { direntry } = dir_channel_rx.blocking_recv()<span class="question-mark">??</span>;
     Detour::Success(direntry)
@@ -875,7 +875,7 @@
 
     <span class="kw">let </span>requesting_dir = CloseDir { fd: remote_fd };
 
-    blocking_send_file_message(HookMessageFile::CloseDir(requesting_dir))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::CloseDir(requesting_dir))<span class="question-mark">?</span>;
 
     Detour::Success(<span class="number">0</span>)
 }
@@ -906,7 +906,7 @@
             file_channel_tx,
         };
 
-        blocking_send_file_message(HookMessageFile::OpenRelative(requesting_file))<span class="question-mark">?</span>;
+        blocking_send_file_message(FileOperation::OpenRelative(requesting_file))<span class="question-mark">?</span>;
 
         <span class="kw">let </span>OpenFileResponse { fd: remote_fd } = file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
         <span class="kw">let </span>fake_local_file_name = CString::new(remote_fd.to_string())<span class="question-mark">?</span>;
@@ -938,7 +938,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Read(reading_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Read(reading_file))<span class="question-mark">?</span>;
 
     Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
 }
@@ -957,7 +957,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::ReadLine(reading_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::ReadLine(reading_file))<span class="question-mark">?</span>;
 
     Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
 }
@@ -976,7 +976,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::ReadLimited(reading_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::ReadLimited(reading_file))<span class="question-mark">?</span>;
 
     Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
 }
@@ -993,7 +993,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::WriteLimited(writing_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::WriteLimited(writing_file))<span class="question-mark">?</span>;
 
     Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
 }
@@ -1023,7 +1023,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Seek(seeking_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Seek(seeking_file))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>SeekFileResponse { result_offset } = file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
     Detour::Success(result_offset)
@@ -1041,7 +1041,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Write(writing_file))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Write(writing_file))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>WriteFileResponse { written_amount } = file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
     Detour::Success(written_amount.try_into()<span class="question-mark">?</span>)
@@ -1066,7 +1066,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Access(access))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Access(access))<span class="question-mark">?</span>;
 
     file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
 
@@ -1129,7 +1129,7 @@
         file_channel_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::Xstat(lstat))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::Xstat(lstat))<span class="question-mark">?</span>;
 
     Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
 }
@@ -1148,7 +1148,7 @@
         dents_tx,
     };
 
-    blocking_send_file_message(HookMessageFile::GetDEnts64(getdents64_message))<span class="question-mark">?</span>;
+    blocking_send_file_message(FileOperation::GetDEnts64(getdents64_message))<span class="question-mark">?</span>;
 
     Detour::Success(dents_rx.blocking_recv()<span class="question-mark">??</span>)
 }

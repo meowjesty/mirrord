@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":[["IGNORE_ERROR_CODES",""]],"enum":[["HookError",""],["LayerError",""]],"fn":[["should_ignore",""]],"type":[["HookResult",""],["Result",""]]};
+window.SIDEBAR_ITEMS = {"enum":[["HookError","Errors that occur in the layer’s hook functions, and will reach the user’s application."],["LayerError","Errors internal to mirrord-layer."]],"mod":[["ignore_codes","Private module for preventing access to the [`IGNORE_ERROR_CODES`] constant."]],"type":[["HookResult",""],["Result",""]]};

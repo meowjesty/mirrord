@@ -12,8 +12,9 @@ mod steal {
     use tokio_tungstenite::connect_async;
 
     use crate::utils::{
-        get_service_host_and_port, get_service_url, kube_client, send_request, send_requests,
-        service, tcp_echo_service, websocket_service, Agent, Application, KubeService,
+        get_pod_instance, get_service_host_and_port, get_service_url, kube_client, send_request,
+        send_requests, service, tcp_echo_service, websocket_service, Agent, Application,
+        KubeService,
     };
 
     #[cfg(target_os = "linux")]
@@ -210,10 +211,23 @@ mod steal {
         let stdout_after = mirrorded_process.get_stdout();
         assert!(!stdout_after.contains("LOCAL APP GOT DATA"));
 
+        // TODO(alex) [high] 2023-01-31: Make a request with `kube_client` to see the pod, then
+        // check afterwards if the pod has been deleted.
+
+        let pod_instance = get_pod_instance(&kube_client, "tcp-echo", &service.namespace)
+            .await
+            .unwrap();
+        println!("pod_instance {:#?}", pod_instance);
+
         mirrorded_process.child.kill().await.unwrap();
 
         // Wait for agent to exit.
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let pod_instance = get_pod_instance(&kube_client, "tcp-echo", &service.namespace)
+            .await
+            .unwrap();
+        println!("pod_instance after sleep {:#?}", pod_instance);
 
         // Now do a meta-test to see that with this setup but without the http filter the data does
         // reach the local app.

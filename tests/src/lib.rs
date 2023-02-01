@@ -676,7 +676,7 @@ mod utils {
             "ghcr.io/metalbear-co/mirrord-tcp-echo:latest",
             "tcp-echo",
             true,
-            false,
+            true,
         )
         .await
     }

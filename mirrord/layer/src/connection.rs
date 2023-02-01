@@ -3,7 +3,7 @@
 //! The layer will either start a new agent pod with [`KubernetesAPI`], directly connect to an
 //! existing agent (currently only used for tests), or let the [`OperatorApi`] handle the
 //! connection.
-use std::time::Duration;
+use std::{sync::OnceLock, time::Duration};
 
 use mirrord_config::LayerConfig;
 use mirrord_kube::{
@@ -14,7 +14,7 @@ use mirrord_operator::client::{OperatorApi, OperatorApiError};
 use mirrord_progress::NoProgress;
 use mirrord_protocol::{ClientMessage, DaemonMessage};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tracing::log::info;
+use tracing::{debug, log::info};
 
 use crate::{graceful_exit, FAIL_STILL_STUCK};
 
@@ -102,6 +102,9 @@ pub(crate) async fn connect(
                     "Reusing existing agent {:?}, port {:?}",
                     pod_agent_name, agent_port
                 );
+
+                debug!("$cmd/agent_name {pod_agent_name}");
+
                 (pod_agent_name.to_owned(), agent_port)
             } else {
                 let (pod_agent_name, agent_port) = tokio::time::timeout(
@@ -111,11 +114,14 @@ pub(crate) async fn connect(
                 .await
                 .unwrap_or(Err(KubeApiError::AgentReadyTimeout))
                 .unwrap_or_else(|err| handle_error(err, config));
+
                 info!("Created new agent {pod_agent_name}, port {agent_port}");
+                info!("$cmd/agent/name {pod_agent_name}");
 
                 // Set env var for children to re-use.
                 std::env::set_var("MIRRORD_CONNECT_AGENT", &pod_agent_name);
                 std::env::set_var("MIRRORD_CONNECT_PORT", agent_port.to_string());
+
 
                 (pod_agent_name, agent_port)
             }

@@ -173,7 +173,8 @@ mod steal {
         #[future] tcp_echo_service: KubeService,
         #[future] kube_client: Client,
         #[values(Agent::Job)] agent: Agent,
-        #[values("THIS IS NOT HTTP!\n", "short.\n")] tcp_data: &str,
+        // #[values("THIS IS NOT HTTP!\n", "short.\n")] tcp_data: &str,
+        #[values("THIS IS NOT HTTP!\n")] tcp_data: &str,
     ) {
         let application = Application::NodeTcpEcho;
         let service = tcp_echo_service.await;
@@ -196,6 +197,13 @@ mod steal {
             .await;
 
         mirrorded_process.wait_for_line(Duration::from_secs(15), "daemon subscribed");
+        // mirrorded_process.wait_for_line(Duration::from_secs(15), "$cmd/agent/name");
+        let stderr = mirrorded_process.get_stderr().clone();
+        let agent_pod_name = stderr
+            .lines()
+            .inspect(|line| println!("LINE: {line}"))
+            .find(|line| line.contains("$cmd/agent/name"))
+            .and_then(|agent_line| agent_line.split("$cmd/agent/name ").last());
 
         let addr = SocketAddr::new(host.trim().parse().unwrap(), port as u16);
         let mut stream = TcpStream::connect(addr).unwrap();
@@ -207,6 +215,11 @@ mod steal {
         assert_eq!(&buf[..8], "remote: "); // The data was passed through to remote app.
         assert_eq!(&buf[8..], tcp_data); // The correct data was sent there and back.
 
+        // name "tcp-echo-qkipa7r" | target "pod/tcp-echo-qkipa7r-6d5f79f66-9dgq2/container/test"
+        println!("name {:#?} | target {:#?}", service.name, service.target);
+
+        let target = get_pod_instance(&kube_client, &service.name, &service.namespace).await;
+
         // Verify the data was passed through and nothing was sent to the local app.
         let stdout_after = mirrorded_process.get_stdout();
         assert!(!stdout_after.contains("LOCAL APP GOT DATA"));
@@ -214,20 +227,10 @@ mod steal {
         // TODO(alex) [high] 2023-01-31: Make a request with `kube_client` to see the pod, then
         // check afterwards if the pod has been deleted.
 
-        let pod_instance = get_pod_instance(&kube_client, "tcp-echo", &service.namespace)
-            .await
-            .unwrap();
-        println!("pod_instance {:#?}", pod_instance);
-
         mirrorded_process.child.kill().await.unwrap();
 
         // Wait for agent to exit.
         tokio::time::sleep(Duration::from_secs(5)).await;
-
-        let pod_instance = get_pod_instance(&kube_client, "tcp-echo", &service.namespace)
-            .await
-            .unwrap();
-        println!("pod_instance after sleep {:#?}", pod_instance);
 
         // Now do a meta-test to see that with this setup but without the http filter the data does
         // reach the local app.

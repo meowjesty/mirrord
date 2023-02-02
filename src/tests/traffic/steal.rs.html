@@ -313,34 +313,6 @@
 <a href="#313" id="313">313</a>
 <a href="#314" id="314">314</a>
 <a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
 </pre><pre class="rust"><code><span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>steal {
     <span class="kw">use </span>std::{
@@ -488,7 +460,7 @@
         <span class="comment">// Since the app exits on DELETE, if there&#39;s a bug and the DELETE was stolen even though it
         // was not supposed to, the app would now exit and the next request would fail.
 
-        // Send a DELETE that should not be matched and thus not stolen.
+        // Send a DELETE that should be matched and thus stolen, closing the app.
         </span><span class="kw">let </span>client = reqwest::Client::new();
         <span class="kw">let </span>req_builder = client.delete(<span class="kw-2">&amp;</span>url);
         <span class="kw">let </span><span class="kw-2">mut </span>headers = HeaderMap::default();
@@ -515,9 +487,9 @@
         <span class="attr">#[future] </span>tcp_echo_service: KubeService,
         <span class="attr">#[future] </span>kube_client: Client,
         <span class="attr">#[values(Agent::Job)] </span>agent: Agent,
+        <span class="attr">#[values(Application::PythonFastApiHTTP, Application::NodeHTTP)] </span>application: Application,
         <span class="attr">#[values(<span class="string">&quot;THIS IS NOT HTTP!\n&quot;</span>, <span class="string">&quot;short.\n&quot;</span>)] </span>tcp_data: <span class="kw-2">&amp;</span>str,
     ) {
-        <span class="kw">let </span>application = Application::NodeTcpEcho;
         <span class="kw">let </span>service = tcp_echo_service.<span class="kw">await</span>;
         <span class="kw">let </span>kube_client = kube_client.<span class="kw">await</span>;
         <span class="kw">let </span>(host, port) = get_service_host_and_port(kube_client.clone(), <span class="kw-2">&amp;</span>service).<span class="kw">await</span>;
@@ -553,34 +525,20 @@
         </span><span class="kw">let </span>stdout_after = mirrorded_process.get_stdout();
         <span class="macro">assert!</span>(!stdout_after.contains(<span class="string">&quot;LOCAL APP GOT DATA&quot;</span>));
 
-        mirrorded_process.child.kill().<span class="kw">await</span>.unwrap();
+        <span class="comment">// Send a DELETE that should be matched and thus stolen, closing the app.
+        </span><span class="kw">let </span>url = get_service_url(kube_client.clone(), <span class="kw-2">&amp;</span>service).<span class="kw">await</span>;
+        <span class="kw">let </span>client = reqwest::Client::new();
+        <span class="kw">let </span>req_builder = client.delete(<span class="kw-2">&amp;</span>url);
+        <span class="kw">let </span><span class="kw-2">mut </span>headers = HeaderMap::default();
+        headers.insert(<span class="string">&quot;x-filter&quot;</span>, <span class="string">&quot;yes&quot;</span>.parse().unwrap()); <span class="comment">// header DOES match.
+        </span>send_request(req_builder, <span class="prelude-val">Some</span>(<span class="string">&quot;DELETE&quot;</span>), headers.clone()).<span class="kw">await</span>;
 
-        <span class="comment">// Wait for agent to exit.
-        </span>tokio::time::sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+        tokio::time::timeout(Duration::from_secs(<span class="number">10</span>), mirrorded_process.child.wait())
+            .<span class="kw">await
+            </span>.unwrap()
+            .unwrap();
 
-        <span class="comment">// Now do a meta-test to see that with this setup but without the http filter the data does
-        // reach the local app.
-
-        </span><span class="kw">let </span><span class="kw-2">mut </span>flags = <span class="macro">vec!</span>[<span class="string">&quot;--steal&quot;</span>];
-        agent.flag().map(|flag| flags.extend(flag));
-        <span class="kw">let </span><span class="kw-2">mut </span>mirrorded_process = application
-            .run(<span class="kw-2">&amp;</span>service.target, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>service.namespace), <span class="prelude-val">Some</span>(flags), <span class="prelude-val">None</span>)
-            .<span class="kw">await</span>;
-
-        mirrorded_process.wait_for_line(Duration::from_secs(<span class="number">15</span>), <span class="string">&quot;daemon subscribed&quot;</span>);
-
-        <span class="kw">let </span><span class="kw-2">mut </span>stream = TcpStream::connect(addr).unwrap();
-        stream.write(tcp_data.as_bytes()).unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>reader = BufReader::new(stream);
-        <span class="kw">let </span><span class="kw-2">mut </span>buf = String::new();
-        reader.read_line(<span class="kw-2">&amp;mut </span>buf).unwrap();
-        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>buf[..<span class="number">7</span>], <span class="string">&quot;local: &quot;</span>); <span class="comment">// The data was stolen to local app.
-        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>buf[<span class="number">7</span>..], tcp_data); <span class="comment">// The correct data was sent there and back.
-
-        // Verify the data was sent to the local app.
-        </span><span class="kw">let </span>stdout_after = mirrorded_process.get_stdout();
-        <span class="macro">assert!</span>(stdout_after.contains(<span class="string">&quot;LOCAL APP GOT DATA&quot;</span>));
-        mirrorded_process.child.kill().<span class="kw">await</span>.unwrap();
+        application.assert(<span class="kw-2">&amp;</span>mirrorded_process);
     }
 
     <span class="doccomment">/// Test the case where running with `steal` set and an http header filter, we get an HTTP
@@ -595,6 +553,7 @@
         <span class="attr">#[future] </span>websocket_service: KubeService,
         <span class="attr">#[future] </span>kube_client: Client,
         <span class="attr">#[values(Agent::Job)] </span>agent: Agent,
+        <span class="attr">#[values(Application::PythonFastApiHTTP, Application::NodeHTTP)] </span>application: Application,
         <span class="attr">#[values(
             <span class="string">&quot;Hello, websocket!\n&quot;</span>.to_string(),
             <span class="string">&quot;websocket\n&quot;</span>.to_string()
@@ -603,7 +562,6 @@
     ) {
         <span class="kw">use </span>futures_util::{SinkExt, StreamExt};
 
-        <span class="kw">let </span>application = Application::NodeTcpEcho;
         <span class="kw">let </span>service = websocket_service.<span class="kw">await</span>;
         <span class="kw">let </span>kube_client = kube_client.<span class="kw">await</span>;
         <span class="kw">let </span>(host, port) = get_service_host_and_port(kube_client.clone(), <span class="kw-2">&amp;</span>service).<span class="kw">await</span>;
@@ -654,34 +612,20 @@
         </span><span class="kw">let </span>stdout_after = mirrorded_process.get_stdout();
         <span class="macro">assert!</span>(!stdout_after.contains(<span class="string">&quot;LOCAL APP GOT DATA&quot;</span>));
 
-        mirrorded_process.child.kill().<span class="kw">await</span>.unwrap();
+        <span class="comment">// Send a DELETE that should be matched and thus stolen, closing the app.
+        </span><span class="kw">let </span>url = get_service_url(kube_client.clone(), <span class="kw-2">&amp;</span>service).<span class="kw">await</span>;
+        <span class="kw">let </span>client = reqwest::Client::new();
+        <span class="kw">let </span>req_builder = client.delete(<span class="kw-2">&amp;</span>url);
+        <span class="kw">let </span><span class="kw-2">mut </span>headers = HeaderMap::default();
+        headers.insert(<span class="string">&quot;x-filter&quot;</span>, <span class="string">&quot;yes&quot;</span>.parse().unwrap()); <span class="comment">// header DOES match.
+        </span>send_request(req_builder, <span class="prelude-val">Some</span>(<span class="string">&quot;DELETE&quot;</span>), headers.clone()).<span class="kw">await</span>;
 
-        <span class="comment">// Wait for agent to exit.
-        </span>tokio::time::sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+        tokio::time::timeout(Duration::from_secs(<span class="number">10</span>), mirrorded_process.child.wait())
+            .<span class="kw">await
+            </span>.unwrap()
+            .unwrap();
 
-        <span class="comment">// Now do a meta-test to see that with this setup but without the http filter the data does
-        // reach the local app.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>flags = <span class="macro">vec!</span>[<span class="string">&quot;--steal&quot;</span>];
-        agent.flag().map(|flag| flags.extend(flag));
-        <span class="kw">let </span><span class="kw-2">mut </span>mirrorded_process = application
-            .run(<span class="kw-2">&amp;</span>service.target, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>service.namespace), <span class="prelude-val">Some</span>(flags), <span class="prelude-val">None</span>)
-            .<span class="kw">await</span>;
-
-        mirrorded_process.wait_for_line(Duration::from_secs(<span class="number">15</span>), <span class="string">&quot;daemon subscribed&quot;</span>);
-
-        <span class="kw">let </span>addr = SocketAddr::new(host.trim().parse().unwrap(), port <span class="kw">as </span>u16);
-        <span class="kw">let </span><span class="kw-2">mut </span>stream = TcpStream::connect(addr).unwrap();
-        stream.write(write_data.as_bytes()).unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>reader = BufReader::new(stream);
-        <span class="kw">let </span><span class="kw-2">mut </span>buf = String::new();
-        reader.read_line(<span class="kw-2">&amp;mut </span>buf).unwrap();
-        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>buf[..<span class="number">7</span>], <span class="string">&quot;local: &quot;</span>); <span class="comment">// The data was stolen to local app.
-        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>buf[<span class="number">7</span>..], write_data); <span class="comment">// The correct data was sent there and back.
-
-        // Verify the data was sent to the local app.
-        </span><span class="kw">let </span>stdout_after = mirrorded_process.get_stdout();
-        <span class="macro">assert!</span>(stdout_after.contains(<span class="string">&quot;LOCAL APP GOT DATA&quot;</span>));
-        mirrorded_process.child.kill().<span class="kw">await</span>.unwrap();
+        application.assert(<span class="kw-2">&amp;</span>mirrorded_process);
     }
 }
 </code></pre></div>

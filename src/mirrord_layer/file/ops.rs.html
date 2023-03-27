@@ -516,6 +516,18 @@
 <a href="#516" id="516">516</a>
 <a href="#517" id="517">517</a>
 <a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
 </pre><pre class="rust"><code><span class="kw">use </span>core::ffi::CStr;
 <span class="kw">use </span>std::{ffi::CString, io::SeekFrom, os::unix::io::RawFd, path::PathBuf};
 
@@ -548,6 +560,52 @@
     <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(fd: u64, path: String) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{ fd, path }
     }
+
+    <span class="doccomment">/// Sends a [`FileOperation::Open`] message, opening the file in the agent.
+    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>remote_open(
+        path: PathBuf,
+        open_options: OpenOptionsInternal,
+    ) -&gt; Detour&lt;OpenFileResponse&gt; {
+        <span class="kw">let </span>(file_channel_tx, file_channel_rx) = oneshot::channel();
+        <span class="kw">let </span>requesting_file = Open {
+            path,
+            open_options,
+            file_channel_tx,
+        };
+
+        blocking_send_file_message(FileOperation::Open(requesting_file))<span class="question-mark">?</span>;
+
+        Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
+    }
+
+    <span class="doccomment">/// Sends a [`FileOperation::Read`] message, reading the file in the agent.
+    ///
+    /// Blocking request and wait on already found remote_fd
+    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>remote_read(remote_fd: u64, read_amount: u64) -&gt; Detour&lt;ReadFileResponse&gt; {
+        <span class="kw">let </span>(file_channel_tx, file_channel_rx) = oneshot::channel();
+
+        <span class="comment">// Limit read size because if we read too much it can lead to a timeout
+        // Seems also that bincode doesn&#39;t do well with large buffers
+        </span><span class="kw">let </span>read_amount = std::cmp::min(read_amount, MAX_READ_SIZE);
+        <span class="kw">let </span>reading_file = Read {
+            remote_fd,
+            buffer_size: read_amount,
+            start_from: <span class="number">0</span>,
+            file_channel_tx,
+        };
+
+        blocking_send_file_message(FileOperation::Read(reading_file))<span class="question-mark">?</span>;
+
+        Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
+    }
+
+    <span class="doccomment">/// Sends a [`FileOperation::Close`] message, closing the file in the agent.
+    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>remote_close(fd: u64) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        blocking_send_file_message(FileOperation::Close(Close { fd }))
+    }
 }
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>RemoteFile {
@@ -558,9 +616,7 @@
         // operation to complete. The write operation is hooked and at some point tries to lock
         // `OPEN_FILES`, which means the thread deadlocks with itself (we call
         // `OPEN_FILES.lock()?.remove()` and then while still locked, `OPEN_FILES.lock()` again)
-        </span><span class="kw">let </span>closing_file = Close { fd: <span class="self">self</span>.fd };
-
-        blocking_send_file_message(FileOperation::Close(closing_file)).expect(
+        </span><span class="self">Self</span>::remote_close(<span class="self">self</span>.fd).expect(
             <span class="string">&quot;mirrord failed to send close file message to main layer thread. Error: {err:?}&quot;</span>,
         );
     }
@@ -623,9 +679,7 @@
 </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;error&quot;</span>)]
 </span><span class="kw">fn </span>close_remote_file_on_failure(fd: u64) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">error!</span>(<span class="string">&quot;Call to `libc::shm_open` resulted in an error, closing the file remotely!&quot;</span>);
-
-    blocking_send_file_message(FileOperation::Close(Close { fd }))<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>(())
+    RemoteFile::remote_close(fd)
 }
 
 <span class="kw">fn </span>blocking_send_file_message(message: FileOperation) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
@@ -654,17 +708,7 @@
 
     <span class="macro">should_ignore!</span>(path, open_options.is_write());
 
-    <span class="kw">let </span>(file_channel_tx, file_channel_rx) = oneshot::channel();
-
-    <span class="kw">let </span>requesting_file = Open {
-        path: path.clone(),
-        open_options,
-        file_channel_tx,
-    };
-
-    blocking_send_file_message(FileOperation::Open(requesting_file))<span class="question-mark">?</span>;
-
-    <span class="kw">let </span>OpenFileResponse { fd: remote_fd } = file_channel_rx.blocking_recv()<span class="question-mark">??</span>;
+    <span class="kw">let </span>OpenFileResponse { fd: remote_fd } = RemoteFile::remote_open(path.clone(), open_options)<span class="question-mark">?</span>;
 
     <span class="comment">// TODO: Need a way to say &quot;open a directory&quot;, right now `is_dir` always returns false.
     // This requires having a fake directory name (`/fake`, for example), instead of just converting
@@ -821,27 +865,7 @@
 /// **Bypassed** when trying to load system files, and files from the current working directory, see
 /// `open`.
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>read(local_fd: RawFd, read_amount: u64) -&gt; Detour&lt;ReadFileResponse&gt; {
-    get_remote_fd(local_fd).and_then(|remote_fd| remote_read(remote_fd, read_amount))
-}
-
-<span class="doccomment">/// Blocking request and wait on already found remote_fd
-</span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>)]
-</span><span class="kw">fn </span>remote_read(remote_fd: u64, read_amount: u64) -&gt; Detour&lt;ReadFileResponse&gt; {
-    <span class="kw">let </span>(file_channel_tx, file_channel_rx) = oneshot::channel();
-
-    <span class="comment">// Limit read size because if we read too much it can lead to a timeout
-    // Seems also that bincode doesn&#39;t do well with large buffers
-    </span><span class="kw">let </span>read_amount = std::cmp::min(read_amount, MAX_READ_SIZE);
-    <span class="kw">let </span>reading_file = Read {
-        remote_fd,
-        buffer_size: read_amount,
-        start_from: <span class="number">0</span>,
-        file_channel_tx,
-    };
-
-    blocking_send_file_message(FileOperation::Read(reading_file))<span class="question-mark">?</span>;
-
-    Detour::Success(file_channel_rx.blocking_recv()<span class="question-mark">??</span>)
+    get_remote_fd(local_fd).and_then(|remote_fd| RemoteFile::remote_read(remote_fd, read_amount))
 }
 
 <span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>)]

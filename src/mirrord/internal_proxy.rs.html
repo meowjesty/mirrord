@@ -200,6 +200,10 @@
 <a href="#200" id="200">200</a>
 <a href="#201" id="201">201</a>
 <a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
 </pre><pre class="rust"><code><span class="doccomment">//! Internal proxy is accepting connection from local layers and forward it to agent
 //! while having 1:1 relationship - each layer connection is another agent connection.
 //!
@@ -301,6 +305,10 @@
 <span class="doccomment">/// Main entry point for the internal proxy.
 /// It listens for inbound layer connect and forwards to agent.
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>proxy(args: InternalProxyArgs) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="comment">// Create a new session for the proxy process, detaching from the original terminal.
+    // This makes the process not to receive signals from the &quot;mirrord&quot; process or it&#39;s parent
+    // terminal fixes some side effects such as https://github.com/metalbear-co/mirrord/issues/1232
+    </span>nix::unistd::setsid().map_err(InternalProxyError::SetSidError)<span class="question-mark">?</span>;
     <span class="comment">// Let it assign port for us then print it for the user.
     </span><span class="kw">let </span>listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, <span class="number">0</span>))
         .<span class="kw">await

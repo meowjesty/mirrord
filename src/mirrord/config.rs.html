@@ -277,6 +277,9 @@
 <a href="#277" id="277">277</a>
 <a href="#278" id="278">278</a>
 <a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
 </pre><pre class="rust"><code><span class="attr">#![deny(missing_docs)]
 
 </span><span class="kw">use </span>std::path::PathBuf;
@@ -543,6 +546,9 @@ Join our Discord server https://discord.gg/pSKEdmNZcK or create a GitHub issue&q
     <span class="doccomment">/// Specify target
     </span><span class="attr">#[arg(short = <span class="string">&#39;t&#39;</span>)]
     </span><span class="kw">pub </span>target: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="doccomment">/// User executable - the executable the layer is going to be injected to.
+    </span><span class="attr">#[arg(short = <span class="string">&#39;e&#39;</span>)]
+    </span><span class="kw">pub </span>executable: <span class="prelude-ty">Option</span>&lt;String&gt;,
 }
 
 <span class="attr">#[derive(Args, Debug)]

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["BuildImageOptions","CommitContainerOptions","CreateImageOptions","ImportImageOptions","ListImagesOptions","PruneImagesOptions","PushImageOptions","RemoveImageOptions","SearchImagesOptions","TagImageOptions"]};
+window.SIDEBAR_ITEMS = {"enum":["BuilderVersion"],"struct":["BuildImageOptions","CommitContainerOptions","CreateImageOptions","ImportImageOptions","ListImagesOptions","PruneImagesOptions","PushImageOptions","RemoveImageOptions","SearchImagesOptions","TagImageOptions"]};

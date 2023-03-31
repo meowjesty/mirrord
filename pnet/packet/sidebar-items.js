@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MutPacketData","PacketData"],"mod":["arp","ethernet","gre","icmp","icmpv6","ip","ipv4","ipv6","tcp","udp","usbpcap","util","vlan"],"trait":["FromPacket","MutablePacket","Packet","PacketSize","PrimitiveValues"]};
+window.SIDEBAR_ITEMS = {"enum":["MutPacketData","PacketData"],"mod":["arp","dhcp","ethernet","gre","icmp","icmpv6","ip","ipv4","ipv6","tcp","udp","usbpcap","util","vlan"],"trait":["FromPacket","MutablePacket","Packet","PacketSize","PrimitiveValues"]};

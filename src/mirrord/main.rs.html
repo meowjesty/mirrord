@@ -376,8 +376,6 @@
 <a href="#376" id="376">376</a>
 <a href="#377" id="377">377</a>
 <a href="#378" id="378">378</a>
-<a href="#379" id="379">379</a>
-<a href="#380" id="380">380</a>
 </pre><pre class="rust"><code><span class="attr">#![feature(let_chains)]
 
 </span><span class="kw">use </span>std::{collections::HashMap, time::Duration};
@@ -397,8 +395,6 @@
     error::KubeApiError,
 };
 <span class="kw">use </span>mirrord_progress::{Progress, TaskProgress};
-<span class="attr">#[cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
-</span><span class="kw">use </span>mirrord_sip::sip_patch;
 <span class="kw">use </span>operator::operator_command;
 <span class="kw">use </span>semver::Version;
 <span class="kw">use </span>serde_json::json;
@@ -540,22 +536,6 @@
 
     <span class="kw">let </span>config = LayerConfig::from_env()<span class="question-mark">?</span>;
 
-    <span class="attr">#[cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
-    </span><span class="kw">let </span>(_did_sip_patch, binary) = <span class="kw">match </span>sip_patch(
-        <span class="kw-2">&amp;</span>args.binary,
-        <span class="kw-2">&amp;</span>config
-            .sip_binaries
-            .clone()
-            .map(|x| x.to_vec())
-            .unwrap_or_default(),
-    )<span class="question-mark">? </span>{
-        <span class="prelude-val">None </span>=&gt; (<span class="bool-val">false</span>, args.binary.clone()),
-        <span class="prelude-val">Some</span>(sip_result) =&gt; (<span class="bool-val">true</span>, sip_result),
-    };
-
-    <span class="attr">#[cfg(not(target_os = <span class="string">&quot;macos&quot;</span>))]
-    </span><span class="kw">let </span>binary = args.binary.clone();
-
     <span class="kw">if </span>config.agent.pause {
         <span class="kw">if </span>config.agent.ephemeral {
             <span class="macro">error!</span>(<span class="string">&quot;Pausing is not yet supported together with an ephemeral agent container.&quot;</span>);
@@ -566,7 +546,20 @@
         }
     }
 
-    <span class="kw">let </span>execution_info = MirrordExecution::start(<span class="kw-2">&amp;</span>config, progress, <span class="prelude-val">None</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="attr">#[cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
+    </span><span class="kw">let </span>execution_info =
+        MirrordExecution::start(<span class="kw-2">&amp;</span>config, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>args.binary), progress, <span class="prelude-val">None</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="attr">#[cfg(not(target_os = <span class="string">&quot;macos&quot;</span>))]
+    </span><span class="kw">let </span>execution_info = MirrordExecution::start(<span class="kw-2">&amp;</span>config, progress, <span class="prelude-val">None</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="attr">#[cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
+    </span><span class="kw">let </span>(_did_sip_patch, binary) = <span class="kw">match </span>execution_info.patched_path {
+        <span class="prelude-val">None </span>=&gt; (<span class="bool-val">false</span>, args.binary.clone()),
+        <span class="prelude-val">Some</span>(sip_result) =&gt; (<span class="bool-val">true</span>, sip_result),
+    };
+
+    <span class="attr">#[cfg(not(target_os = <span class="string">&quot;macos&quot;</span>))]
+    </span><span class="kw">let </span>binary = args.binary.clone();
 
     <span class="comment">// Stop confusion with layer
     </span>std::env::set_var(mirrord_progress::MIRRORD_PROGRESS_ENV, <span class="string">&quot;off&quot;</span>);
@@ -577,17 +570,20 @@
     }
 
     <span class="kw">let </span><span class="kw-2">mut </span>binary_args = args.binary_args.clone();
-    binary_args.insert(<span class="number">0</span>, args.binary.clone());
+    <span class="comment">// Put original executable in argv[0] even if actually running patched version.
+    </span>binary_args.insert(<span class="number">0</span>, args.binary.clone());
 
     sub_progress.done_with(<span class="string">&quot;ready to launch process&quot;</span>);
     <span class="comment">// The execve hook is not yet active and does not hijack this call.
     </span><span class="kw">let </span>err = execvp(binary.clone(), binary_args.clone());
     <span class="macro">error!</span>(<span class="string">&quot;Couldn&#39;t execute {:?}&quot;</span>, err);
     <span class="attr">#[cfg(all(target_os = <span class="string">&quot;macos&quot;</span>, target_arch = <span class="string">&quot;aarch64&quot;</span>))]
-    </span><span class="kw">if let </span>exec::Error::Errno(errno::Errno(<span class="number">86</span>)) = err {
-        <span class="comment">// &quot;Bad CPU type in executable&quot;
-        </span><span class="kw">if </span>_did_sip_patch {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(CliError::RosettaMissing(binary));
+    </span><span class="kw">if let </span>exec::Error::Errno(errno) = err {
+        <span class="kw">if </span>Into::&lt;i32&gt;::into(errno) == <span class="number">86 </span>{
+            <span class="comment">// &quot;Bad CPU type in executable&quot;
+            </span><span class="kw">if </span>_did_sip_patch {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(CliError::RosettaMissing(binary));
+            }
         }
     }
     <span class="prelude-val">Err</span>(CliError::BinaryExecuteFailed(binary, binary_args))

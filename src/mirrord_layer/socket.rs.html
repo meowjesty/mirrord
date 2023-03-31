@@ -265,6 +265,7 @@
     sync::{Arc, LazyLock, Mutex},
 };
 
+<span class="kw">use </span>dashmap::DashMap;
 <span class="kw">use </span>libc::{c_int, sockaddr, socklen_t};
 <span class="kw">use </span>mirrord_protocol::outgoing::SocketAddress;
 <span class="kw">use </span>socket2::SockAddr;
@@ -281,8 +282,7 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>id;
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>ops;
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">static </span>SOCKETS: LazyLock&lt;Mutex&lt;HashMap&lt;RawFd, Arc&lt;UserSocket&gt;&gt;&gt;&gt; =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">static </span>SOCKETS: LazyLock&lt;DashMap&lt;RawFd, Arc&lt;UserSocket&gt;&gt;&gt; = LazyLock::new(DashMap::new);
 
 <span class="doccomment">/// Holds the connections that have yet to be [`accept`](ops::accept)ed.
 ///

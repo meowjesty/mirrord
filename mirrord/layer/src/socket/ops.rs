@@ -126,6 +126,8 @@ pub(super) fn bind(
     // bound, as we bind to a fake address, but if we don't check for this then we're changing
     // normal socket behavior (see issue #1123).
     {
+        // TODO(alex) [high] 2023-04-05: `127.0.0.1:80`, `localhost:80`, `0.0.0.0:80` are all the
+        // same address, so we gotta have a special check for localhost.
         SOCKETS
             .iter()
             .find(|socket| match &socket.state {

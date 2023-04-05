@@ -106,9 +106,14 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Detour<Raw
     Detour::Success(socket_fd)
 }
 
+// TODO(alex) [high] 2023-04-05: To fix the bind/listen issue, steps:
+// 1. Preserve local address requested by the user;
+//    - this means that we have to check if this address is already bound locally;
+//    - also have to check that it's ok to bind on the remote (agent);
+
 /// Check if the socket is managed by us, if it's managed by us and it's not an ignored port,
 /// update the socket state.
-#[tracing::instrument(level = "trace", skip(raw_address))]
+// #[tracing::instrument(level = "trace", skip(raw_address))]
 pub(super) fn bind(
     sockfd: c_int,
     raw_address: *const sockaddr,
@@ -116,6 +121,24 @@ pub(super) fn bind(
 ) -> Detour<i32> {
     let requested_address = SocketAddr::try_from_raw(raw_address, address_length)?;
     let requested_port = requested_address.port();
+
+    // Check if the user's requested address isn't already in use, even though it's not actually
+    // bound, as we bind to a fake address, but if we don't check for this then we're changing
+    // normal socket behavior (see issue #1123).
+    {
+        SOCKETS
+            .iter()
+            .find(|socket| match &socket.state {
+                SocketState::Initialized => false,
+                SocketState::Bound(bound) => bound.requested_address == requested_address,
+                SocketState::Listening(listening) => {
+                    listening.requested_address == requested_address
+                }
+                // TODO(alex) [mid] 2023-04-05: Do we need `requested_address` in connected?
+                SocketState::Connected(_) => false,
+            })
+            .ok_or(HookError::AddressAlreadyBound(requested_address))?;
+    }
 
     let ignore_localhost = INCOMING_IGNORE_LOCALHOST
         .get()

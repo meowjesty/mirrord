@@ -1,4 +1,4 @@
-use std::{env::VarError, ptr, str::ParseBoolError};
+use std::{env::VarError, net::SocketAddr, ptr, str::ParseBoolError};
 
 use errno::set_errno;
 use ignore_codes::*;
@@ -90,6 +90,9 @@ pub(crate) enum HookError {
         supported IP or unix socket address."
     )]
     UnsupportedSocketType,
+
+    #[error("mirrord-layer: Socket address `{0}` is already bound!")]
+    AddressAlreadyBound(SocketAddr),
 }
 
 /// Errors internal to mirrord-layer.
@@ -276,6 +279,7 @@ impl From<HookError> for i64 {
             HookError::FailedSipPatch(_) => libc::EACCES,
             HookError::SocketUnsuportedIpv6 => libc::EAFNOSUPPORT,
             HookError::UnsupportedSocketType => libc::EAFNOSUPPORT,
+            HookError::AddressAlreadyBound(_) => libc::EADDRINUSE,
         };
 
         set_errno(errno::Errno(libc_error));

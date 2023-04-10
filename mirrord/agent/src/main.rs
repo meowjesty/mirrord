@@ -11,6 +11,7 @@
 use std::{
     collections::{HashMap, HashSet},
     net::{Ipv4Addr, SocketAddrV4},
+    os::fd::IntoRawFd,
     path::PathBuf,
 };
 
@@ -394,11 +395,18 @@ impl ClientConnectionHandler {
                     type_,
                     protocol,
                 }) => {
+                    // TODO(alex) [high] 2023-04-10:
+                    // 4. Drop the socket.
+                    // We use this socket just to check if the `bind` address is available.
                     let bind_result =
                         socket2::Socket::new(domain.into(), type_.into(), Some(protocol.into()))
                             .map_err(ResponseError::from)
                             .and_then(|temporary_socket| {
                                 temporary_socket.bind(&address.into())?;
+
+                                let fd = temporary_socket.into_raw_fd();
+                                nix::unistd::close(fd).unwrap();
+
                                 Ok(BindSocketResponse)
                             });
 
@@ -410,11 +418,6 @@ impl ClientConnectionHandler {
                                 fail
                             )
                         })?
-                    // TODO(alex) [high] 2023-04-10:
-                    // 1. Check type of socket(?);
-                    // 2. Call `bind` on it;
-                    // 3. Get the result to `self.respond` with success or the error;
-                    // 4. Drop the socket.
                 }
             },
             ClientMessage::TcpOutgoing(layer_message) => {

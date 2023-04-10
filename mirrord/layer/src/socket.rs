@@ -102,7 +102,7 @@ pub struct Connected {
 #[derive(Debug, Clone, Copy)]
 pub struct Bound {
     requested_address: SocketAddr,
-    address: SocketAddr,
+    mirror_address: SocketAddr,
 }
 
 #[derive(Debug, Default)]

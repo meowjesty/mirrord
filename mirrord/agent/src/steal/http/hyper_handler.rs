@@ -16,7 +16,7 @@ use hyper::{
     http::{self, response},
     Request, Response,
 };
-use mirrord_protocol::{ConnectionId, Port, RequestId};
+use mirrord_protocol::{ConnectionId, RequestId};
 use tokio::{
     net::TcpStream,
     sync::{mpsc::Sender, oneshot},
@@ -51,13 +51,10 @@ where
     /// Identifies this [`TcpStream`] connection.
     pub(crate) connection_id: ConnectionId,
 
-    /// The port we're filtering HTTP traffic on.
-    pub(crate) port: Port,
-
     /// The original [`SocketAddr`] of the connection we're intercepting.
     ///
     /// Used for the case where we have an unmatched request (HTTP request did not match any of the
-    /// `filters`).
+    /// `filters`), and to check which port we're filtering.
     pub(crate) original_destination: SocketAddr,
 
     /// Keeps track of which HTTP request we're dealing with, so we don't mix up [`Request`]s.
@@ -233,7 +230,6 @@ where
         original_destination: SocketAddr,
         upgrade_tx: Option<oneshot::Sender<RawHyperConnection>>,
         filters: Arc<DashMap<ClientId, Regex>>,
-        port: Port,
         connection_id: ConnectionId,
         request_id: RequestId,
         matched_tx: Sender<HandlerHttpRequest>,
@@ -242,7 +238,7 @@ where
             Self::unmatched_request(request, upgrade_tx, original_destination).await
         } else if let Some(client_id) = header_matches(&request, &filters) {
             let request = MatchedHttpRequest {
-                port,
+                address: original_destination,
                 connection_id,
                 client_id,
                 request_id,

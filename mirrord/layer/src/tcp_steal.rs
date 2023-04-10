@@ -13,7 +13,7 @@ use mirrord_protocol::{
         StealType::{All, FilteredHttp},
         TcpClose, TcpData,
     },
-    ClientMessage, ConnectionId, Port, RequestId,
+    ClientMessage, ConnectionId, RequestId,
 };
 use streammap_ext::StreamMap;
 use tokio::{
@@ -41,7 +41,7 @@ mod http;
 async fn handle_response(
     request: HttpRequest,
     response: Result<Response<Incoming>, hyper::Error>,
-    port: Port,
+    address: SocketAddr,
     connection_id: ConnectionId,
     request_id: RequestId,
 ) -> Result<HttpResponse, HttpForwarderError> {
@@ -74,7 +74,7 @@ async fn handle_response(
                 ))
             }
             Ok(res) => Ok(
-                HttpResponse::from_hyper_response(res, port, connection_id, request_id)
+                HttpResponse::from_hyper_response(res, address, connection_id, request_id)
                     .await
                     .unwrap_or_else(|e| {
                         error!("Failed to read response to filtered http request: {e:?}. \
@@ -221,9 +221,10 @@ impl TcpHandler for TcpStealHandler {
         mut listen: Listen,
         tx: &Sender<ClientMessage>,
     ) -> Result<(), LayerError> {
-        let original_port = listen.requested_port;
+        let original_port = listen.requested_address.port();
         self.apply_port_mapping(&mut listen);
-        let request_port = listen.requested_port;
+
+        let request_port = listen.requested_address.port();
 
         if !self.ports_mut().insert(listen) {
             info!("Port {request_port} already listening, might be on different address");
@@ -308,11 +309,11 @@ impl TcpStealHandler {
     ) -> Result<(), LayerError> {
         let listen = self
             .ports()
-            .get(&http_request.port)
-            .ok_or(LayerError::PortNotFound(http_request.port))?;
+            .get(&http_request.address)
+            .ok_or(LayerError::PortNotFound(http_request.address.port()))?;
         let addr: SocketAddr = listen.into();
         let connection_id = http_request.connection_id;
-        let port = http_request.port;
+        let request_address = http_request.address;
 
         let (request_sender, request_receiver) = channel(1024);
 
@@ -328,7 +329,7 @@ impl TcpStealHandler {
                         addr,
                         request_receiver,
                         response_sender,
-                        port,
+                        request_address,
                         connection_id,
                     )
                     .and_then(ConnectionTask::start)
@@ -343,7 +344,7 @@ impl TcpStealHandler {
                         addr,
                         request_receiver,
                         response_sender,
-                        port,
+                        request_address,
                         connection_id,
                     )
                     .and_then(ConnectionTask::start)
@@ -353,11 +354,13 @@ impl TcpStealHandler {
 
             if let Err(e) = connection_task_result {
                 error!(
-                    "Error while forwarding http connection {connection_id} (port {port}): {e:?}."
+                    "Error while forwarding http connection {connection_id} (port {}): {e:?}.",
+                    request_address.port()
                 )
             } else {
                 trace!(
-                    "Filtered http connection {connection_id} (port {port}) closed without errors."
+                    "Filtered http connection {connection_id} (port {}) closed without errors.",
+                    request_address.port()
                 )
             }
         });

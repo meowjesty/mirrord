@@ -18,7 +18,7 @@ use hyper::{
     service::Service,
     Request, Response,
 };
-use mirrord_protocol::{ConnectionId, Port};
+use mirrord_protocol::ConnectionId;
 use tokio::{
     net::TcpStream,
     sync::{mpsc::Sender, oneshot},
@@ -59,7 +59,6 @@ impl HttpV for HttpV2 {
                     filters,
                     matched_tx,
                     connection_id,
-                    original_destination.port(),
                     original_destination,
                 ),
             )
@@ -118,14 +117,12 @@ impl HyperHandler<HttpV2> {
         filters: Arc<DashMap<ClientId, Regex>>,
         matched_tx: Sender<HandlerHttpRequest>,
         connection_id: ConnectionId,
-        port: Port,
         original_destination: SocketAddr,
     ) -> Self {
         Self {
             filters,
             matched_tx,
             connection_id,
-            port,
             original_destination,
             request_id: 0,
             handle_version: HttpV2,
@@ -149,7 +146,6 @@ impl Service<Request<Incoming>> for HyperHandler<HttpV2> {
             self.original_destination,
             None,
             self.filters.clone(),
-            self.port,
             self.connection_id,
             self.request_id,
             self.matched_tx.clone(),

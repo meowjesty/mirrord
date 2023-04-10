@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -96,7 +96,7 @@ pub struct HandlerHttpRequest {
 /// connection task to be forwarded to the matching client.
 #[derive(Debug)]
 pub struct MatchedHttpRequest {
-    pub port: Port,
+    pub address: SocketAddr,
     pub connection_id: ConnectionId,
     pub client_id: ClientId,
     pub request_id: RequestId,
@@ -126,7 +126,7 @@ impl MatchedHttpRequest {
         };
 
         Ok(HttpRequest {
-            port: self.port,
+            address: self.address,
             connection_id: self.connection_id,
             request_id: self.request_id,
             internal_request,

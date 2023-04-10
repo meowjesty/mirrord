@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{DaemonTcp, HttpRequest, NewTcpConnection, TcpClose, TcpData},
-    ClientMessage, Port, ResponseError,
+    ClientMessage, ResponseError,
 };
 use tokio::{net::TcpStream, sync::mpsc::Sender};
 use tracing::{debug, error, log::trace};
@@ -30,15 +30,19 @@ pub(crate) enum TcpIncoming {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Listen {
-    pub mirror_port: Port,
-    pub requested_port: Port,
-    pub ipv6: bool,
+    /// _fd_-independent identifier for a socket.
     pub id: SocketId,
+
+    /// Address requested by the user's program, i.e. `127.0.0.1:80`.
+    pub requested_address: SocketAddr,
+
+    /// Address of our interceptor socket, i.e. `UNSPECIFIED:{random}`.
+    pub mirror_address: SocketAddr,
 }
 
 impl PartialEq for Listen {
     fn eq(&self, other: &Self) -> bool {
-        self.requested_port == other.requested_port
+        self.requested_address == other.requested_address
     }
 }
 
@@ -46,25 +50,31 @@ impl Eq for Listen {}
 
 impl Hash for Listen {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.requested_port.hash(state);
+        self.requested_address.hash(state);
     }
 }
 
-impl Borrow<Port> for Listen {
-    fn borrow(&self) -> &Port {
-        &self.requested_port
+impl Borrow<SocketAddr> for Listen {
+    fn borrow(&self) -> &SocketAddr {
+        &self.requested_address
     }
 }
 
 impl From<&Listen> for SocketAddr {
     fn from(listen: &Listen) -> Self {
-        let address = if listen.ipv6 {
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), listen.mirror_port)
+        let address = if listen.mirror_address.is_ipv6() {
+            SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                listen.mirror_address.port(),
+            )
         } else {
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), listen.mirror_port)
+            SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                listen.mirror_address.port(),
+            )
         };
 
-        debug_assert_eq!(address.port(), listen.mirror_port);
+        debug_assert_eq!(address.port(), listen.mirror_address.port());
         address
     }
 }
@@ -78,9 +88,15 @@ pub(crate) trait TcpHandler {
     /// Modify `Listen` to match local port to remote port based on mapping
     /// If no mapping is found, the port is not modified
     fn apply_port_mapping(&self, listen: &mut Listen) {
-        if let Some(mapped_port) = self.port_mapping_ref().get_by_left(&listen.requested_port) {
-            trace!("mapping port {} to {mapped_port}", &listen.requested_port);
-            listen.requested_port = *mapped_port;
+        if let Some(mapped_port) = self
+            .port_mapping_ref()
+            .get_by_left(&listen.requested_address.port())
+        {
+            debug!(
+                "mapping address {} to port {mapped_port}",
+                &listen.requested_address
+            );
+            listen.requested_address.set_port(*mapped_port);
         }
     }
 
@@ -149,7 +165,10 @@ pub(crate) trait TcpHandler {
 
         let listen = self
             .ports()
-            .get(&remote_destination_port)
+            .get(&SocketAddr::new(
+                tcp_connection.remote_address,
+                remote_destination_port,
+            ))
             .ok_or(LayerError::PortNotFound(remote_destination_port))?;
 
         let addr: SocketAddr = listen.into();

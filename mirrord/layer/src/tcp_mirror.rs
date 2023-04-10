@@ -203,7 +203,7 @@ impl TcpHandler for TcpMirrorHandler {
         tx: &Sender<ClientMessage>,
     ) -> Result<()> {
         self.apply_port_mapping(&mut listen);
-        let request_port = listen.requested_port;
+        let request_port = listen.requested_address.port();
 
         if !self.ports_mut().insert(listen) {
             info!("Port {request_port} already listening, might be on different address",);

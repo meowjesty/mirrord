@@ -7,7 +7,7 @@ use futures::FutureExt;
 use hyper::{body::Incoming, Response};
 use mirrord_protocol::{
     tcp::{HttpRequest, HttpResponse},
-    ConnectionId, Port,
+    ConnectionId,
 };
 use tokio::{
     net::TcpStream,
@@ -30,7 +30,7 @@ pub(super) mod v2;
 pub(super) struct ConnectionTask<HttpVersion: HttpV> {
     request_receiver: Receiver<HttpRequest>,
     response_sender: Sender<HttpResponse>,
-    port: Port,
+    request_address: SocketAddr,
     connection_id: ConnectionId,
 
     /// Address we're connecting to.
@@ -87,7 +87,7 @@ pub(super) trait HttpV: Sized {
     async fn send_http_request_to_application(
         &mut self,
         request: HttpRequest,
-        port: Port,
+        address: SocketAddr,
         connection_id: ConnectionId,
         destination: SocketAddr,
     ) -> Result<HttpResponse, HttpForwarderError> {
@@ -95,7 +95,7 @@ pub(super) trait HttpV: Sized {
 
         let response = self
             .send_request(request.clone())
-            .map(|response| handle_response(request, response, port, connection_id, request_id))
+            .map(|response| handle_response(request, response, address, connection_id, request_id))
             .await
             .await;
 
@@ -109,7 +109,9 @@ pub(super) trait HttpV: Sized {
 
             Ok(self
                 .send_request(request.clone())
-                .map(|response| handle_response(request, response, port, connection_id, request_id))
+                .map(|response| {
+                    handle_response(request, response, address, connection_id, request_id)
+                })
                 .await
                 .await?)
         } else {
@@ -130,7 +132,7 @@ where
         connect_to: SocketAddr,
         request_receiver: Receiver<HttpRequest>,
         response_sender: Sender<HttpResponse>,
-        port: Port,
+        request_address: SocketAddr,
         connection_id: ConnectionId,
     ) -> Result<ConnectionTask<V>, HttpForwarderError> {
         let http_version = Self::connect_to_application(connect_to).await?;
@@ -138,7 +140,7 @@ where
         Ok(ConnectionTask {
             request_receiver,
             response_sender,
-            port,
+            request_address,
             connection_id,
             destination: connect_to,
             http_version,
@@ -151,7 +153,7 @@ where
         let Self {
             mut request_receiver,
             response_sender,
-            port,
+            request_address: port,
             connection_id,
             destination,
             mut http_version,

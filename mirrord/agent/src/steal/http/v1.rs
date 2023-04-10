@@ -19,7 +19,7 @@ use hyper::{
     service::Service,
     Request, Response,
 };
-use mirrord_protocol::{ConnectionId, Port};
+use mirrord_protocol::ConnectionId;
 use tokio::{
     io::{copy_bidirectional, AsyncWriteExt},
     macros::support::poll_fn,
@@ -82,7 +82,6 @@ impl HttpV for HttpV1 {
                     filters,
                     matched_tx,
                     connection_id,
-                    original_destination.port(),
                     original_destination,
                     Some(upgrade_tx),
                 ),
@@ -174,7 +173,6 @@ impl HyperHandler<HttpV1> {
         filters: Arc<DashMap<ClientId, Regex>>,
         matched_tx: Sender<HandlerHttpRequest>,
         connection_id: ConnectionId,
-        port: Port,
         original_destination: SocketAddr,
         upgrade_tx: Option<oneshot::Sender<RawHyperConnection>>,
     ) -> Self {
@@ -182,7 +180,6 @@ impl HyperHandler<HttpV1> {
             filters,
             matched_tx,
             connection_id,
-            port,
             original_destination,
             request_id: 0,
             handle_version: HttpV1(upgrade_tx),
@@ -206,7 +203,6 @@ impl Service<Request<Incoming>> for HyperHandler<HttpV1> {
             self.original_destination,
             self.handle_version.take_upgrade_tx(),
             self.filters.clone(),
-            self.port,
             self.connection_id,
             self.request_id,
             self.matched_tx.clone(),

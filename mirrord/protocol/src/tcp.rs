@@ -1,5 +1,8 @@
 use core::fmt::Display;
-use std::{fmt, net::IpAddr};
+use std::{
+    fmt,
+    net::{IpAddr, SocketAddr},
+};
 
 use bincode::{Decode, Encode};
 use bytes::Bytes;
@@ -157,7 +160,7 @@ pub struct HttpRequest {
     pub request_id: RequestId,
     /// Unlike TcpData, HttpRequest includes the port, so that the connection can be created
     /// "lazily", with the first filtered request.
-    pub port: Port,
+    pub address: SocketAddr,
 }
 
 impl HttpRequest {
@@ -186,7 +189,7 @@ pub struct InternalHttpResponse {
 pub struct HttpResponse {
     /// This is used to make sure the response is sent in its turn, after responses to all earlier
     /// requests were already sent.
-    pub port: Port,
+    pub address: SocketAddr,
     pub connection_id: ConnectionId,
     pub request_id: RequestId,
     #[bincode(with_serde)]
@@ -200,7 +203,7 @@ impl HttpResponse {
     /// So this is our alternative implementation to `From<Response<Incoming>>`.
     pub async fn from_hyper_response(
         response: Response<Incoming>,
-        port: Port,
+        address: SocketAddr,
         connection_id: ConnectionId,
         request_id: RequestId,
     ) -> Result<HttpResponse, hyper::Error> {
@@ -224,7 +227,7 @@ impl HttpResponse {
 
         Ok(HttpResponse {
             request_id,
-            port,
+            address,
             connection_id,
             internal_response,
         })
@@ -235,7 +238,7 @@ impl HttpResponse {
             internal_request: InternalHttpRequest { version, .. },
             connection_id,
             request_id,
-            port,
+            address,
         } = request;
 
         let body = format!(
@@ -247,7 +250,7 @@ impl HttpResponse {
         .into_bytes();
 
         Self {
-            port,
+            address,
             connection_id,
             request_id,
             internal_response: InternalHttpResponse {
@@ -264,11 +267,11 @@ impl HttpResponse {
             internal_request: InternalHttpRequest { version, .. },
             connection_id,
             request_id,
-            port,
+            address,
         } = request;
 
         Self {
-            port,
+            address,
             connection_id,
             request_id,
             internal_response: InternalHttpResponse {

@@ -13,7 +13,7 @@ use libc::{c_int, sockaddr, socklen_t};
 use mirrord_protocol::{dns::LookupRecord, file::OpenOptionsInternal};
 use socket2::SockAddr;
 use tokio::sync::oneshot;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 use super::{hooks::*, *};
 use crate::{
@@ -109,11 +109,11 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Detour<Raw
 // TODO(alex) [high] 2023-04-05: To fix the bind/listen issue, steps:
 // 1. Preserve local address requested by the user;
 //    - this means that we have to check if this address is already bound locally;
-//    - also have to check that it's ok to bind on the remote (agent);
+//    - also have to check that it's ok to bind on the remote (agent)?
 
 /// Check if the socket is managed by us, if it's managed by us and it's not an ignored port,
 /// update the socket state.
-// #[tracing::instrument(level = "trace", skip(raw_address))]
+#[tracing::instrument(level = "trace", skip(raw_address))]
 pub(super) fn bind(
     sockfd: c_int,
     raw_address: *const sockaddr,
@@ -122,25 +122,31 @@ pub(super) fn bind(
     let requested_address = SocketAddr::try_from_raw(raw_address, address_length)?;
     let requested_port = requested_address.port();
 
+    info!("\n\nRequested address {requested_address:#?}\n");
+    {
+        SOCKETS
+            .iter()
+            .for_each(|s| info!("SOCKET {:#?} {:#?}", s.id, s.state));
+    }
+
     // Check if the user's requested address isn't already in use, even though it's not actually
     // bound, as we bind to a fake address, but if we don't check for this then we're changing
     // normal socket behavior (see issue #1123).
+    if SOCKETS
+        .iter()
+        .find(|socket| match &socket.state {
+            SocketState::Initialized => false,
+            SocketState::Bound(bound) => bound.requested_address == requested_address,
+            SocketState::Listening(listening) => listening.requested_address == requested_address,
+            // TODO(alex) [mid] 2023-04-05: Do we need `requested_address` in connected?
+            SocketState::Connected(_) => false,
+        })
+        .is_some()
     {
-        // TODO(alex) [high] 2023-04-05: `127.0.0.1:80`, `localhost:80`, `0.0.0.0:80` are all the
-        // same address, so we gotta have a special check for localhost.
-        SOCKETS
-            .iter()
-            .find(|socket| match &socket.state {
-                SocketState::Initialized => false,
-                SocketState::Bound(bound) => bound.requested_address == requested_address,
-                SocketState::Listening(listening) => {
-                    listening.requested_address == requested_address
-                }
-                // TODO(alex) [mid] 2023-04-05: Do we need `requested_address` in connected?
-                SocketState::Connected(_) => false,
-            })
-            .ok_or(HookError::AddressAlreadyBound(requested_address))?;
+        Err(HookError::AddressAlreadyBound(requested_address))?;
     }
+
+    info!("\n\nBINDING NEW");
 
     let ignore_localhost = INCOMING_IGNORE_LOCALHOST
         .get()
@@ -195,7 +201,7 @@ pub(super) fn bind(
 
     // We need to find out what's the port we bound to, that'll be used by `poll_agent` to
     // connect to.
-    let address = unsafe {
+    let mirror_address = unsafe {
         SockAddr::try_init(|storage, len| {
             if FN_GETSOCKNAME(sockfd, storage.cast(), len) == -1 {
                 error!("bind -> Failed `getsockname` sockfd {:#?}", sockfd);
@@ -212,7 +218,7 @@ pub(super) fn bind(
 
     Arc::get_mut(&mut socket).unwrap().state = SocketState::Bound(Bound {
         requested_address,
-        address,
+        mirror_address,
     });
 
     SOCKETS.insert(sockfd, socket);
@@ -234,7 +240,7 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
     match socket.state {
         SocketState::Bound(Bound {
             requested_address,
-            address,
+            mirror_address,
         }) => {
             let listen_result = unsafe { FN_LISTEN(sockfd, backlog) };
             if listen_result != 0 {
@@ -244,15 +250,14 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
             }
 
             blocking_send_hook_message(HookMessage::Tcp(TcpIncoming::Listen(Listen {
-                mirror_port: address.port(),
-                requested_port: requested_address.port(),
-                ipv6: address.is_ipv6(),
                 id: socket.id,
+                mirror_address,
+                requested_address,
             })))?;
 
             Arc::get_mut(&mut socket).unwrap().state = SocketState::Listening(Bound {
                 requested_address,
-                address,
+                mirror_address,
             });
 
             SOCKETS.insert(sockfd, socket);
@@ -376,13 +381,13 @@ pub(super) fn connect(
                     let socket = entry.value();
                     if let SocketState::Listening(Bound {
                         requested_address,
-                        address,
+                        mirror_address,
                     }) = socket.state
                     {
                         if requested_address.port() == ip_address.port()
                             && socket.protocol == user_socket_info.protocol
                         {
-                            let rawish_remote_address = SockAddr::from(address);
+                            let rawish_remote_address = SockAddr::from(mirror_address);
                             let result = unsafe {
                                 FN_CONNECT(
                                     sockfd,
@@ -452,10 +457,10 @@ pub(super) fn connect(
             {
                 connect_outgoing::<TCP>(sockfd, remote_address, user_socket_info)
             }
-            SocketState::Bound(Bound { address, .. }) => {
+            SocketState::Bound(Bound { mirror_address, .. }) => {
                 trace!("connect -> SocketState::Bound {:#?}", user_socket_info);
 
-                let address = SockAddr::from(address);
+                let address = SockAddr::from(mirror_address);
                 let bind_result = unsafe { FN_BIND(sockfd, address.as_ptr(), address.len()) };
 
                 if bind_result != 0 {
@@ -500,27 +505,35 @@ pub(super) fn getpeername(
     fill_address(address, address_len, remote_address.try_into()?)
 }
 /// Resolve the fake local address to the real local address.
-#[tracing::instrument(level = "trace", skip(address, address_len))]
+#[tracing::instrument(level = "debug", skip(address, address_len))]
 pub(super) fn getsockname(
     sockfd: RawFd,
     address: *mut sockaddr,
     address_len: *mut socklen_t,
 ) -> Detour<i32> {
-    let local_address = {
+    let (d_address, local_address) = {
         SOCKETS
             .get(&sockfd)
             .bypass(Bypass::LocalFdNotFound(sockfd))
             .and_then(|entry| match &entry.value().state {
-                SocketState::Connected(connected) => {
-                    Detour::Success(connected.local_address.clone())
+                SocketState::Connected(connected) => Detour::Success((
+                    connected.remote_address.clone(),
+                    connected.local_address.clone(),
+                )),
+                SocketState::Bound(bound) => {
+                    Detour::Success((bound.mirror_address.into(), bound.requested_address.into()))
                 }
-                SocketState::Bound(bound) => Detour::Success(bound.requested_address.into()),
-                SocketState::Listening(bound) => Detour::Success(bound.requested_address.into()),
+                SocketState::Listening(bound) => {
+                    Detour::Success((bound.mirror_address.into(), bound.requested_address.into()))
+                }
                 _ => Detour::Bypass(Bypass::InvalidState(sockfd)),
             })?
     };
 
-    debug!("getsockname -> local_address {:#?}", local_address);
+    debug!(
+        "getsockname -> remote_address {d_address:#?} local_address {:#?}",
+        local_address
+    );
 
     fill_address(address, address_len, local_address.try_into()?)
 }
@@ -718,7 +731,7 @@ pub(super) fn getaddrinfo(
         })
         .ok_or(HookError::DNSNoName)?;
 
-    debug!("getaddrinfo -> result {:#?}", result);
+    trace!("getaddrinfo -> result {:#?}", result);
 
     Detour::Success(result)
 }

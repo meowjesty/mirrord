@@ -21,7 +21,7 @@ use tokio::{
     task,
 };
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use super::*;
 use crate::{common::ResponseDeque, detour::DetourGuard, error::LayerError};
@@ -96,7 +96,7 @@ impl UdpOutgoingHandler {
         mirror_socket: UdpSocket,
         remote_rx: Receiver<Vec<u8>>,
     ) {
-        debug!("UDP interceptor started.");
+        trace!("UDP interceptor started.");
         let mut remote_stream = ReceiverStream::new(remote_rx);
         let mut recv_from_buffer = vec![0; 1500];
 
@@ -122,7 +122,7 @@ impl UdpOutgoingHandler {
                 biased; // To allow local socket to be read before being closed
 
                 read = mirror_socket.recv_from(&mut recv_from_buffer) => {
-                    debug!("read from recv_from");
+                    trace!("read from recv_from");
                     match read {
                         Err(fail) if fail.kind() == std::io::ErrorKind::WouldBlock => {
                             continue;

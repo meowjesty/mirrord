@@ -102,7 +102,7 @@ use mirrord_protocol::{
 };
 use outgoing::{tcp::TcpOutgoingHandler, udp::UdpOutgoingHandler};
 use regex::RegexSet;
-use socket::SOCKETS;
+use socket::{SocketHandler, SOCKETS};
 use tcp::TcpHandler;
 use tcp_mirror::TcpMirrorHandler;
 use tcp_steal::TcpStealHandler;
@@ -500,6 +500,8 @@ struct Layer {
     // `common` module above `XHook` structs.
     file_handler: FileHandler,
 
+    socket_handler: SocketHandler,
+
     /// Handles the DNS lookup response we get from the agent, see
     /// `getaddrinfo`.
     ///
@@ -548,6 +550,7 @@ impl Layer {
             tcp_outgoing_handler: TcpOutgoingHandler::default(),
             udp_outgoing_handler: Default::default(),
             file_handler: FileHandler::default(),
+            socket_handler: SocketHandler::default(),
             getaddrinfo_handler_queue: VecDeque::new(),
             tcp_steal_handler: TcpStealHandler::new(
                 filter,
@@ -591,6 +594,12 @@ impl Layer {
             }
             HookMessage::File(message) => {
                 self.file_handler
+                    .handle_hook_message(message, &self.tx)
+                    .await
+                    .unwrap();
+            }
+            HookMessage::Socket(message) => {
+                self.socket_handler
                     .handle_hook_message(message, &self.tx)
                     .await
                     .unwrap();
@@ -645,6 +654,9 @@ impl Layer {
                 self.tcp_steal_handler.handle_daemon_message(message).await
             }
             DaemonMessage::File(message) => self.file_handler.handle_daemon_message(message).await,
+            DaemonMessage::Socket(message) => {
+                self.socket_handler.handle_daemon_message(message).await
+            }
             DaemonMessage::TcpOutgoing(message) => {
                 self.tcp_outgoing_handler
                     .handle_daemon_message(message)

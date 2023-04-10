@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::{self},
+    io,
 };
 
 use actix_codec::{Decoder, Encoder};
@@ -22,6 +22,7 @@ use crate::{
         tcp::{DaemonTcpOutgoing, LayerTcpOutgoing},
         udp::{DaemonUdpOutgoing, LayerUdpOutgoing},
     },
+    socket::{BindSocketRequest, BindSocketResponse},
     tcp::{DaemonTcp, LayerTcp, LayerTcpSteal},
     ResponseError,
 };
@@ -56,6 +57,11 @@ pub enum FileRequest {
     GetDEnts64(GetDEnts64Request),
 }
 
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub enum SocketRequest {
+    Bind(BindSocketRequest),
+}
+
 /// `-layer` --> `-agent` messages.
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum ClientMessage {
@@ -65,6 +71,7 @@ pub enum ClientMessage {
     TcpOutgoing(LayerTcpOutgoing),
     UdpOutgoing(LayerUdpOutgoing),
     FileRequest(FileRequest),
+    SocketRequest(SocketRequest),
     GetEnvVarsRequest(GetEnvVarsRequest),
     Ping,
     GetAddrInfoRequest(GetAddrInfoRequest),
@@ -88,6 +95,12 @@ pub enum FileResponse {
     #[cfg(target_os = "linux")]
     GetDEnts64(RemoteResult<GetDEnts64Response>),
 }
+
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub enum SocketResponse {
+    Bind(RemoteResult<BindSocketResponse>),
+}
+
 /// `-agent` --> `-layer` messages.
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub enum DaemonMessage {
@@ -98,6 +111,7 @@ pub enum DaemonMessage {
     UdpOutgoing(DaemonUdpOutgoing),
     LogMessage(LogMessage),
     File(FileResponse),
+    Socket(SocketResponse),
     Pong,
     /// NOTE: can remove `RemoteResult` when we break protocol compatibility.
     GetEnvVarsResponse(RemoteResult<HashMap<String, String>>),

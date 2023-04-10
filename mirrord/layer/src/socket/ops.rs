@@ -216,6 +216,17 @@ pub(super) fn bind(
     .and_then(|(_, address)| address.as_socket())
     .bypass(Bypass::AddressConversion)?;
 
+    let (socket_channel_tx, socket_channel_rx) = oneshot::channel();
+    let bind = Bind {
+        address: requested_address,
+        domain: socket.domain,
+        type_: socket.type_,
+        protocol: socket.protocol,
+        socket_channel_tx,
+    };
+    blocking_send_hook_message(HookMessage::Socket(SocketOperation::Bind(bind)))?;
+    socket_channel_rx.blocking_recv()??;
+
     Arc::get_mut(&mut socket).unwrap().state = SocketState::Bound(Bound {
         requested_address,
         mirror_address,
@@ -223,7 +234,7 @@ pub(super) fn bind(
 
     SOCKETS.insert(sockfd, socket);
 
-    Detour::Success(bind_result)
+    Detour::Success(0)
 }
 
 /// Subscribe to the agent on the real port. Messages received from the agent on the real port will

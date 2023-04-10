@@ -1,17 +1,19 @@
 //! Shared place for a few types and functions that are used everywhere by the layer.
+use core::fmt;
 use std::{collections::VecDeque, ffi::CStr, path::PathBuf};
 
 use libc::c_char;
 use mirrord_protocol::{file::OpenOptionsInternal, RemoteResult};
 use tokio::sync::oneshot;
-use tracing::warn;
+use tracing::{error, warn};
 
 use crate::{
     detour::{Bypass, Detour},
     dns::GetAddrInfo,
-    error::{HookError, HookResult},
+    error::{HookError, HookResult, LayerError, Result},
     file::{FileOperation, OpenOptionsInternalExt},
     outgoing::{tcp::TcpOutgoing, udp::UdpOutgoing},
+    socket::SocketOperation,
     tcp::TcpIncoming,
     HOOK_SENDER,
 };
@@ -83,6 +85,7 @@ pub(crate) enum HookMessage {
 
     /// Message originating from `getaddrinfo`, see [`GetAddrInfo`].
     GetAddrinfo(GetAddrInfo),
+    Socket(SocketOperation),
 }
 
 /// Converts raw pointer values `P` to some other type.
@@ -130,4 +133,20 @@ impl CheckedInto<OpenOptionsInternal> for *const c_char {
     fn checked_into(self) -> Detour<OpenOptionsInternal> {
         CheckedInto::<String>::checked_into(self).map(OpenOptionsInternal::from_mode)
     }
+}
+
+/// Comfort function for popping oldest request from queue and sending given value into the channel.
+#[tracing::instrument(level = "trace", skip(deque))]
+pub(crate) fn pop_send<T: fmt::Debug>(
+    deque: &mut ResponseDeque<T>,
+    value: RemoteResult<T>,
+) -> Result<()> {
+    deque
+        .pop_front()
+        .ok_or(LayerError::SendErrorOpsResponse)?
+        .send(value)
+        .map_err(|fail| {
+            error!("Failed send operation with {:#?}!", fail);
+            LayerError::SendErrorOpsResponse
+        })
 }

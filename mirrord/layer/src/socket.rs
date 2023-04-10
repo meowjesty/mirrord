@@ -9,15 +9,21 @@ use std::{
 
 use dashmap::DashMap;
 use libc::{c_int, sockaddr, socklen_t};
-use mirrord_protocol::outgoing::SocketAddress;
+use mirrord_protocol::{
+    outgoing::SocketAddress,
+    socket::{BindSocketRequest, BindSocketResponse},
+    ClientMessage, SocketRequest, SocketResponse,
+};
 use socket2::SockAddr;
-use tracing::warn;
+use tokio::sync::mpsc::Sender;
+use tracing::{trace, warn};
 use trust_dns_resolver::config::Protocol;
 
 use self::id::SocketId;
 use crate::{
+    common::{pop_send, ResponseChannel, ResponseDeque},
     detour::{Bypass, Detour, OptionExt},
-    error::{HookError, HookResult},
+    error::{HookError, HookResult, Result},
 };
 
 pub(super) mod hooks;
@@ -253,5 +259,72 @@ impl SocketAddrExt for SocketAddr {
     fn try_from_raw(raw_address: *const sockaddr, address_length: socklen_t) -> Detour<SocketAddr> {
         SockAddr::try_from_raw(raw_address, address_length)
             .and_then(|address| address.as_socket().bypass(Bypass::AddressConversion))
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct Bind {
+    address: SocketAddr,
+    domain: i32,
+    type_: i32,
+    protocol: i32,
+    socket_channel_tx: ResponseChannel<BindSocketResponse>,
+}
+
+#[derive(Debug)]
+pub(super) enum SocketOperation {
+    Bind(Bind),
+}
+
+#[derive(Default)]
+pub(super) struct SocketHandler {
+    bind_queue: ResponseDeque<BindSocketResponse>,
+}
+
+impl SocketHandler {
+    pub(crate) async fn handle_daemon_message(&mut self, message: SocketResponse) -> Result<()> {
+        use SocketResponse::*;
+        match message {
+            Bind(bind) => {
+                trace!("DaemonMessage::BindSocketResponse {bind:#?}!");
+                pop_send(&mut self.bind_queue, bind)
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, tx))]
+    pub(crate) async fn handle_hook_message(
+        &mut self,
+        message: SocketOperation,
+        tx: &Sender<ClientMessage>,
+    ) -> Result<()> {
+        use SocketOperation::*;
+        match message {
+            Bind(bind) => self.handle_hook_bind(bind, tx).await,
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, tx))]
+    async fn handle_hook_bind(&mut self, bind: Bind, tx: &Sender<ClientMessage>) -> Result<()> {
+        let Bind {
+            address,
+            domain,
+            type_,
+            protocol,
+            socket_channel_tx,
+        } = bind;
+        trace!("HookMessage::BindSocketHook address {address:#?}",);
+
+        self.bind_queue.push_back(socket_channel_tx);
+
+        let bind_socket_request = BindSocketRequest {
+            address,
+            domain,
+            type_,
+            protocol,
+        };
+
+        let request = ClientMessage::SocketRequest(SocketRequest::Bind(bind_socket_request));
+        tx.send(request).await.map_err(From::from)
     }
 }

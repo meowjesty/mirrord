@@ -139,8 +139,8 @@ pub(crate) enum LayerError {
     #[error("mirrord-layer: JoinError failed with `{0}`!")]
     Join(#[from] tokio::task::JoinError),
 
-    #[error("mirrord-layer: Failed to get `Sender` for sending file response!")]
-    SendErrorFileResponse,
+    #[error("mirrord-layer: Failed to get `Sender` for sending operation response!")]
+    SendErrorOpsResponse,
 
     #[error("mirrord-layer: Failed to get `Sender` for sending getaddrinfo response!")]
     SendErrorGetAddrInfoResponse,

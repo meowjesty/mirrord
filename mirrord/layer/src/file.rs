@@ -1,13 +1,3 @@
-/// File operations on remote pod.
-///
-/// Read-only file operations are enabled by default, you can turn it off by setting
-/// `MIRRORD_FILE_RO_OPS` to `false`.
-///
-///
-/// Some file paths and types are ignored by default (bypassed by mirrord, meaning they are
-/// opened locally), these are controlled by configuring the [`filter::FileFilter`] with
-/// `[FsConfig]`.
-use core::fmt;
 use std::{
     io::SeekFrom,
     os::unix::io::RawFd,
@@ -27,14 +17,14 @@ use mirrord_protocol::{
         ReadFileResponse, ReadLimitedFileRequest, SeekFileRequest, SeekFileResponse,
         WriteFileRequest, WriteFileResponse, WriteLimitedFileRequest, XstatRequest, XstatResponse,
     },
-    ClientMessage, FileRequest, FileResponse, RemoteResult,
+    ClientMessage, FileRequest, FileResponse,
 };
 use tokio::sync::mpsc::Sender;
 use tracing::{error, trace, warn};
 
 use crate::{
-    common::{ResponseChannel, ResponseDeque},
-    error::{LayerError, Result},
+    common::{pop_send, ResponseChannel, ResponseDeque},
+    error::Result,
 };
 
 pub(crate) mod filter;
@@ -129,19 +119,6 @@ pub struct FileHandler {
     readdir_queue: ResponseDeque<ReadDirResponse>,
     #[cfg(target_os = "linux")]
     getdents64_queue: ResponseDeque<GetDEnts64Response>,
-}
-
-/// Comfort function for popping oldest request from queue and sending given value into the channel.
-#[tracing::instrument(level = "trace", skip(deque))]
-fn pop_send<T: fmt::Debug>(deque: &mut ResponseDeque<T>, value: RemoteResult<T>) -> Result<()> {
-    deque
-        .pop_front()
-        .ok_or(LayerError::SendErrorFileResponse)?
-        .send(value)
-        .map_err(|fail| {
-            error!("Failed send operation with {:#?}!", fail);
-            LayerError::SendErrorFileResponse
-        })
 }
 
 impl FileHandler {

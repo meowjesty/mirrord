@@ -24,7 +24,10 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
     SinkExt, TryFutureExt,
 };
-use mirrord_protocol::{ClientMessage, DaemonCodec, DaemonMessage, GetEnvVarsRequest};
+use mirrord_protocol::{
+    socket::{BindSocketRequest, BindSocketResponse},
+    ClientMessage, DaemonCodec, DaemonMessage, GetEnvVarsRequest, ResponseError, SocketResponse,
+};
 use outgoing::{udp::UdpOutgoingApi, TcpOutgoingApi};
 use runtime::ContainerInfo;
 use sniffer::{SnifferCommand, TcpConnectionSniffer, TcpSnifferApi};
@@ -369,7 +372,7 @@ impl ClientConnectionHandler {
     /// Handles incoming messages from the connected client (`mirrord-layer`).
     ///
     /// Returns `false` if the client disconnected.
-    #[tracing::instrument(level = "trace", skip(self))]
+    // #[tracing::instrument(level = "trace", skip(self))]
     async fn handle_client_message(&mut self, message: ClientMessage) -> Result<bool> {
         match message {
             ClientMessage::FileRequest(req) => {
@@ -384,6 +387,36 @@ impl ClientConnectionHandler {
                         })?
                 }
             }
+            ClientMessage::SocketRequest(req) => match req {
+                mirrord_protocol::SocketRequest::Bind(BindSocketRequest {
+                    address,
+                    domain,
+                    type_,
+                    protocol,
+                }) => {
+                    let bind_result =
+                        socket2::Socket::new(domain.into(), type_.into(), Some(protocol.into()))
+                            .map_err(ResponseError::from)
+                            .and_then(|temporary_socket| {
+                                temporary_socket.bind(&address.into())?;
+                                Ok(BindSocketResponse)
+                            });
+
+                    self.respond(DaemonMessage::Socket(SocketResponse::Bind(bind_result)))
+                        .await
+                        .inspect_err(|fail| {
+                            error!(
+                                "handle_client_message -> Failed responding to socket message {:#?}!",
+                                fail
+                            )
+                        })?
+                    // TODO(alex) [high] 2023-04-10:
+                    // 1. Check type of socket(?);
+                    // 2. Call `bind` on it;
+                    // 3. Get the result to `self.respond` with success or the error;
+                    // 4. Drop the socket.
+                }
+            },
             ClientMessage::TcpOutgoing(layer_message) => {
                 self.tcp_outgoing_api.layer_message(layer_message).await?
             }

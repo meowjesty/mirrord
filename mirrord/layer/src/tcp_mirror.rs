@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     time::Duration,
 };
@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{HttpRequest, LayerTcp, NewTcpConnection, TcpClose, TcpData},
-    ClientMessage, ConnectionId,
+    ClientMessage, ConnectionId, Port,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -114,7 +114,7 @@ impl Borrow<ConnectionId> for Connection {
 /// Handles traffic mirroring
 #[derive(Default)]
 pub struct TcpMirrorHandler {
-    ports: HashSet<Listen>,
+    ports: HashMap<Port, Listen>,
     connections: HashSet<Connection>,
     /// LocalPort:RemotePort mapping.
     port_mapping: BiMap<u16, u16>,
@@ -132,7 +132,7 @@ impl TcpMirrorHandler {
 #[async_trait]
 impl TcpHandler for TcpMirrorHandler {
     /// Handle NewConnection messages
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_new_connection(&mut self, tcp_connection: NewTcpConnection) -> Result<()> {
         let stream = self.create_local_stream(&tcp_connection).await?;
         debug!("Handling new connection: local stream: {:?}.", &stream);
@@ -184,11 +184,11 @@ impl TcpHandler for TcpMirrorHandler {
         Ok(())
     }
 
-    fn ports(&self) -> &HashSet<Listen> {
+    fn ports(&self) -> &HashMap<Port, Listen> {
         &self.ports
     }
 
-    fn ports_mut(&mut self) -> &mut HashSet<Listen> {
+    fn ports_mut(&mut self) -> &mut HashMap<Port, Listen> {
         &mut self.ports
     }
 
@@ -205,7 +205,10 @@ impl TcpHandler for TcpMirrorHandler {
         self.apply_port_mapping(&mut listen);
         let request_port = listen.requested_address.port();
 
-        if !self.ports_mut().insert(listen) {
+        if let Some(_) = self
+            .ports_mut()
+            .insert(listen.requested_address.port(), listen)
+        {
             info!("Port {request_port} already listening, might be on different address",);
             return Ok(());
         }

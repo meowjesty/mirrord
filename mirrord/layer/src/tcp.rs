@@ -1,7 +1,6 @@
 /// Tcp Traffic management, common code for stealing & mirroring
 use std::{
-    borrow::Borrow,
-    collections::HashSet,
+    collections::HashMap,
     hash::{Hash, Hasher},
     net::SocketAddr,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -11,10 +10,10 @@ use async_trait::async_trait;
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{DaemonTcp, HttpRequest, NewTcpConnection, TcpClose, TcpData},
-    ClientMessage, ResponseError,
+    ClientMessage, Port, ResponseError,
 };
 use tokio::{net::TcpStream, sync::mpsc::Sender};
-use tracing::{debug, error, log::trace};
+use tracing::{debug, error, info};
 
 use crate::{
     detour::DetourGuard,
@@ -54,12 +53,6 @@ impl Hash for Listen {
     }
 }
 
-impl Borrow<SocketAddr> for Listen {
-    fn borrow(&self) -> &SocketAddr {
-        &self.requested_address
-    }
-}
-
 impl From<&Listen> for SocketAddr {
     fn from(listen: &Listen) -> Self {
         let address = if listen.mirror_address.is_ipv6() {
@@ -81,8 +74,8 @@ impl From<&Listen> for SocketAddr {
 
 #[async_trait]
 pub(crate) trait TcpHandler {
-    fn ports(&self) -> &HashSet<Listen>;
-    fn ports_mut(&mut self) -> &mut HashSet<Listen>;
+    fn ports(&self) -> &HashMap<Port, Listen>;
+    fn ports_mut(&mut self) -> &mut HashMap<Port, Listen>;
     fn port_mapping_ref(&self) -> &BiMap<u16, u16>;
 
     /// Modify `Listen` to match local port to remote port based on mapping
@@ -101,7 +94,7 @@ pub(crate) trait TcpHandler {
     }
 
     /// Returns true to let caller know to keep running
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_daemon_message(&mut self, message: DaemonTcp) -> Result<(), LayerError> {
         let handled = match message {
             DaemonTcp::NewConnection(tcp_connection) => {
@@ -148,7 +141,7 @@ pub(crate) trait TcpHandler {
 
     /// Connects to the local listening socket, add it to the queue and return the stream.
     /// Find better name
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn create_local_stream(
         &mut self,
         tcp_connection: &NewTcpConnection,
@@ -158,20 +151,24 @@ pub(crate) trait TcpHandler {
             .port_mapping_ref()
             .get_by_right(&tcp_connection.destination_port)
             .map(|p| {
-                trace!("mapping port {} to {p}", &tcp_connection.destination_port);
+                debug!("mapping port {} to {p}", &tcp_connection.destination_port);
                 *p
             })
             .unwrap_or(tcp_connection.destination_port);
 
+        info!(
+            "\nget {:#?}, and ports are {:#?}\n",
+            SocketAddr::new(tcp_connection.remote_address, remote_destination_port),
+            self.ports(),
+        );
+
         let listen = self
             .ports()
-            .get(&SocketAddr::new(
-                tcp_connection.remote_address,
-                remote_destination_port,
-            ))
+            .get(&remote_destination_port)
             .ok_or(LayerError::PortNotFound(remote_destination_port))?;
 
         let addr: SocketAddr = listen.into();
+        info!("address to connect to {addr:#?}");
 
         let info = SocketInformation::new(
             SocketAddr::new(tcp_connection.remote_address, tcp_connection.source_port),

@@ -144,7 +144,7 @@ where
 ///
 /// These tasks will execute `on_start_fn` to change namespace (see [`enter_namespace`] for more
 /// details).
-#[tracing::instrument(level = "trace", skip_all)]
+// #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn run_thread<F, StartFn>(
     future: F,
     thread_name: String,
@@ -169,7 +169,7 @@ where
 }
 
 /// Calls [`run_thread`] with `on_start_fn` always being [`enter_namespace`].
-#[tracing::instrument(level = "trace", skip_all)]
+// #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn run_thread_in_namespace<F>(
     future: F,
     thread_name: String,
@@ -191,7 +191,7 @@ where
 ///
 /// Many of the agent's TCP/UDP connections require that they're made from the `pid`'s namespace to
 /// work.
-#[tracing::instrument(level = "trace")]
+// #[tracing::instrument(level = "trace")]
 pub(crate) fn enter_namespace(pid: Option<u64>, namespace: &str) -> Result<(), AgentError> {
     if let Some(pid) = pid {
         let path = PathBuf::from("/proc").join(pid.to_string()).join("ns");

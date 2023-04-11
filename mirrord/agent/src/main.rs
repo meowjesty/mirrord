@@ -373,7 +373,7 @@ impl ClientConnectionHandler {
     /// Handles incoming messages from the connected client (`mirrord-layer`).
     ///
     /// Returns `false` if the client disconnected.
-    // #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn handle_client_message(&mut self, message: ClientMessage) -> Result<bool> {
         match message {
             ClientMessage::FileRequest(req) => {
@@ -402,10 +402,12 @@ impl ClientConnectionHandler {
                         socket2::Socket::new(domain.into(), type_.into(), Some(protocol.into()))
                             .map_err(ResponseError::from)
                             .and_then(|temporary_socket| {
+                                trace!("Checking bind address {address:#?}");
                                 temporary_socket.bind(&address.into())?;
 
                                 let fd = temporary_socket.into_raw_fd();
                                 nix::unistd::close(fd).unwrap();
+                                trace!("Closing temporary socket fd {fd:#?}");
 
                                 Ok(BindSocketResponse)
                             });

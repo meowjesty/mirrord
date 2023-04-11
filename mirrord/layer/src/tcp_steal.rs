@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::SocketAddr,
-};
+use std::{collections::HashMap, net::SocketAddr};
 
 use async_trait::async_trait;
 use bimap::BiMap;
@@ -13,7 +10,7 @@ use mirrord_protocol::{
         StealType::{All, FilteredHttp},
         TcpClose, TcpData,
     },
-    ClientMessage, ConnectionId, RequestId,
+    ClientMessage, ConnectionId, Port, RequestId,
 };
 use streammap_ext::StreamMap;
 use tokio::{
@@ -91,7 +88,7 @@ async fn handle_response(
 }
 
 pub struct TcpStealHandler {
-    ports: HashSet<Listen>,
+    ports: HashMap<Port, Listen>,
     write_streams: HashMap<ConnectionId, WriteHalf<TcpStream>>,
     read_streams: StreamMap<ConnectionId, ReaderStream<ReadHalf<TcpStream>>>,
 
@@ -203,11 +200,11 @@ impl TcpHandler for TcpStealHandler {
         Ok(())
     }
 
-    fn ports(&self) -> &HashSet<Listen> {
+    fn ports(&self) -> &HashMap<Port, Listen> {
         &self.ports
     }
 
-    fn ports_mut(&mut self) -> &mut HashSet<Listen> {
+    fn ports_mut(&mut self) -> &mut HashMap<Port, Listen> {
         &mut self.ports
     }
 
@@ -226,7 +223,10 @@ impl TcpHandler for TcpStealHandler {
 
         let request_port = listen.requested_address.port();
 
-        if !self.ports_mut().insert(listen) {
+        if let Some(_) = self
+            .ports_mut()
+            .insert(listen.requested_address.port(), listen)
+        {
             info!("Port {request_port} already listening, might be on different address");
             return Ok(());
         }
@@ -309,7 +309,7 @@ impl TcpStealHandler {
     ) -> Result<(), LayerError> {
         let listen = self
             .ports()
-            .get(&http_request.address)
+            .get(&http_request.address.port())
             .ok_or(LayerError::PortNotFound(http_request.address.port()))?;
         let addr: SocketAddr = listen.into();
         let connection_id = http_request.connection_id;

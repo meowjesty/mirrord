@@ -27,9 +27,32 @@ use crate::{
     ResponseError,
 };
 
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone, Copy)]
+pub enum LogLevel {
+    Warn,
+    Error,
+}
+
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct LogMessage {
     pub message: String,
+    pub level: LogLevel,
+}
+
+impl LogMessage {
+    pub fn warn(message: String) -> Self {
+        Self {
+            message,
+            level: LogLevel::Warn,
+        }
+    }
+
+    pub fn error(message: String) -> Self {
+        Self {
+            message,
+            level: LogLevel::Error,
+        }
+    }
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]

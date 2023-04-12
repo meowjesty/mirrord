@@ -515,6 +515,32 @@ pub(super) fn getpeername(
 
     fill_address(address, address_len, remote_address.try_into()?)
 }
+
+// TODO(alex) [high] 2023-04-11: The address we get here should be the proper modified ip
+// "10.244.x.x:80".
+// 1. Should the port be `80` though, or should it be the mirrored port value?
+// 2. Which ip is the correct one, "10.244.0.x" (remote address), or "10.244.1.x" (local)?
+//    - can check this in the integration test, probably gives a clearer address.
+//    | call | remote               | local           | request    |
+//    | 0    | 127.0.0.1:43033      | 0.0.0.0:80      |            |
+//    | 1    | 10.253.155.219:58162 | 10.244.1.2:3745 |            |
+//    | 2    | 10.244.0.1:48749     | 10.244.1.2:80   | 0.0.0.0:80 |
+//    | 3    | 10.244.0.1:25279     | 10.244.1.2:80   | 0.0.0.0:80 |
+//    | 4    | 10.244.0.1:7385      | 10.244.1.2:80   |
+//
+// ADD(alex) [high] 2023-04-11: Alright, the issue at hand is that we're binding a locally with an
+// user specified ip of `A`, but the agent handles the bind (socket listener in sniffer/stealer)
+// with `0.0.0.0`, which results in different ips between local and agent.
+//
+// A possible solution would be to create a sort of `SocketManager` in the agent (same vein as the
+// `FileManager`), which does some of the basic socket operations, like `bind`, and, more
+// importantly, `getsockname`, which would become very thin here (layer).
+//
+// I'm not sure if just sending the address to the agent would be enough to solve this without this
+// "manager", or if it's ok to create a `TcpListener` (for example) in the agent with a user
+// supplied ip. Maybe `localhost` works, but what if the user sets an ip that isn't reachable in the
+// agent, like some user machine eth0 ip "192.168.x.x", while the agent lives in "10.10.x.x"?
+//
 /// Resolve the fake local address to the real local address.
 #[tracing::instrument(level = "debug", skip(address, address_len))]
 pub(super) fn getsockname(
@@ -542,7 +568,7 @@ pub(super) fn getsockname(
     };
 
     debug!(
-        "getsockname -> remote_address {d_address:#?} local_address {:#?}",
+        "\ngetsockname -> remote_address {d_address:#?} local_address {:#?}\n",
         local_address
     );
 

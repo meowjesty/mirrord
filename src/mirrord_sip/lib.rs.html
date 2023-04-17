@@ -861,7 +861,7 @@
         </span><span class="kw">fn </span>is_sip_false() {
             <span class="kw">let </span><span class="kw-2">mut </span>f = tempfile::NamedTempFile::new().unwrap();
             <span class="kw">let </span>data = std::fs::read(<span class="string">&quot;/bin/ls&quot;</span>).unwrap();
-            f.write(<span class="kw-2">&amp;</span>data).unwrap();
+            f.write_all(<span class="kw-2">&amp;</span>data).unwrap();
             f.flush().unwrap();
             <span class="macro">assert!</span>(<span class="macro">matches!</span>(
                 get_sip_status(f.path().to_str().unwrap(), <span class="kw-2">&amp;</span><span class="macro">vec!</span>[]).unwrap(),
@@ -898,7 +898,7 @@
             <span class="kw">let </span><span class="kw-2">mut </span>original_file = tempfile::NamedTempFile::new().unwrap();
             <span class="kw">let </span>patched_path = temp_dir().join(original_file.path().strip_prefix(<span class="string">&quot;/&quot;</span>).unwrap());
             original_file
-                .write(<span class="string">&quot;#!/usr/bin/env bash\n&quot;</span>.as_ref())
+                .write_all(<span class="string">&quot;#!/usr/bin/env bash\n&quot;</span>.as_ref())
                 .unwrap();
             original_file.flush().unwrap();
             std::fs::create_dir_all(patched_path.parent().unwrap()).unwrap();
@@ -923,7 +923,7 @@
         </span><span class="kw">fn </span>patch_shebang_and_binary() {
             <span class="kw">let </span><span class="kw-2">mut </span>script = tempfile::NamedTempFile::new().unwrap();
             <span class="kw">let </span>script_contents = <span class="string">&quot;#!/usr/bin/env bash\nexit\n&quot;</span>;
-            script.write(script_contents.as_ref()).unwrap();
+            script.write_all(script_contents.as_ref()).unwrap();
             script.flush().unwrap();
             <span class="kw">let </span>changed_script_path = sip_patch(script.path().to_str().unwrap(), <span class="kw-2">&amp;</span>Vec::new())
                 .unwrap()
@@ -948,7 +948,7 @@
         </span><span class="kw">fn </span>patch_twice() {
             <span class="kw">let </span><span class="kw-2">mut </span>script = tempfile::NamedTempFile::new().unwrap();
             <span class="kw">let </span>script_contents = <span class="string">&quot;#!/bin/bash\nexit\n&quot;</span>;
-            script.write(script_contents.as_ref()).unwrap();
+            script.write_all(script_contents.as_ref()).unwrap();
             script.flush().unwrap();
 
             <span class="kw">let </span>path = script.path();
@@ -967,7 +967,7 @@
         </span><span class="kw">fn </span>cyclic_shebangs() {
             <span class="kw">let </span><span class="kw-2">mut </span>script = tempfile::NamedTempFile::new().unwrap();
             <span class="kw">let </span>contents = <span class="string">&quot;#!&quot;</span>.to_string() + script.path().to_str().unwrap();
-            script.write(contents.as_bytes()).unwrap();
+            script.write_all(contents.as_bytes()).unwrap();
             script.flush().unwrap();
             <span class="kw">let </span>res = sip_patch(script.path().to_str().unwrap(), <span class="kw-2">&amp;</span>Vec::new());
             <span class="macro">assert!</span>(<span class="macro">matches!</span>(res, <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)));

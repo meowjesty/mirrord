@@ -93,6 +93,9 @@ pub(crate) enum HookError {
 
     #[error("mirrord-layer: Socket address `{0}` is already bound!")]
     AddressAlreadyBound(SocketAddr),
+
+    #[error("mirrord-layer: Pointer argument points to an invalid address")]
+    BadPointer,
 }
 
 /// Errors internal to mirrord-layer.
@@ -106,7 +109,7 @@ pub(crate) enum LayerError {
     ResponseError(#[from] ResponseError),
 
     #[error("mirrord-layer: Frida failed with `{0}`!")]
-    Frida(#[from] frida_gum::Error),
+    Frida(frida_gum::Error),
 
     #[error("mirrord-layer: Failed to find export for name `{0}`!")]
     NoExportName(String),
@@ -280,6 +283,7 @@ impl From<HookError> for i64 {
             HookError::SocketUnsuportedIpv6 => libc::EAFNOSUPPORT,
             HookError::UnsupportedSocketType => libc::EAFNOSUPPORT,
             HookError::AddressAlreadyBound(_) => libc::EADDRINUSE,
+            HookError::BadPointer => libc::EFAULT,
         };
 
         set_errno(errno::Errno(libc_error));
@@ -329,5 +333,11 @@ impl From<HookError> for *mut c_char {
         let _ = i64::from(fail);
 
         ptr::null_mut()
+    }
+}
+
+impl From<frida_gum::Error> for LayerError {
+    fn from(err: frida_gum::Error) -> Self {
+        LayerError::Frida(err)
     }
 }

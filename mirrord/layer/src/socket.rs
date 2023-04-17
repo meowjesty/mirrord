@@ -24,6 +24,7 @@ use crate::{
     common::{pop_send, ResponseChannel, ResponseDeque},
     detour::{Bypass, Detour, OptionExt},
     error::{HookError, HookResult, Result},
+    INCOMING_IGNORE_PORTS,
 };
 
 pub(super) mod hooks;

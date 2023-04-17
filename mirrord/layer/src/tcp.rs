@@ -6,7 +6,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
-use async_trait::async_trait;
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{DaemonTcp, HttpRequest, NewTcpConnection, TcpClose, TcpData},
@@ -72,7 +71,6 @@ impl From<&Listen> for SocketAddr {
     }
 }
 
-#[async_trait]
 pub(crate) trait TcpHandler {
     fn ports(&self) -> &HashMap<Port, Listen>;
     fn ports_mut(&mut self) -> &mut HashMap<Port, Listen>;

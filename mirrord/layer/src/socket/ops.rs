@@ -549,6 +549,25 @@ pub(super) fn getpeername(
 // supplied ip. Maybe `localhost` works, but what if the user sets an ip that isn't reachable in the
 // agent, like some user machine eth0 ip "192.168.x.x", while the agent lives in "10.10.x.x"?
 //
+// ADD(alex) [high] 2023-04-21: We have 3 different IPs going on here:
+// 1. When `bind` is called (create a `TcpListener`):
+//   - [mirrord] "0.0.0.0:80";
+//   - [normal] "0.0.0.0:80";
+// 2. When `accept` is called (`TcpStream` is created):
+//   - [mirrord] local "10.244.1.85:80", peer "10.244.0.1:42008";
+//   - [normal] local "127.0.0.1:80", peer "127.0.0.1:36382";
+// 3. The request has "Host" with:
+//   - [mirrord] "192.168.49.2:30030" (pod py-server service address);
+//   - [normal] "0.0.0.0:80";
+//
+// It looks like we're mimicking the IP changes correctly?
+//
+// ADD(alex) [high] 2023-04-21: Think I'm finally getting the full issue:
+// We should be resolving the IP of the real remote pod, so a "localhost:80" would actually bind
+// to whatever the remote pod's IP is, which I think means that:
+// - `bind("localhost:80")` becomes `bind("10.104.239.78:80")`, which is the `samples-python-flask`
+//   cluster-IP.
+
 /// Resolve the fake local address to the real local address.
 #[tracing::instrument(level = "debug", skip(address, address_len))]
 pub(super) fn getsockname(

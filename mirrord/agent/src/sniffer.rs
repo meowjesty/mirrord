@@ -439,6 +439,7 @@ impl TcpConnectionSniffer {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip(self, clients))]
     async fn send_message_to_clients(
         &mut self,
         clients: impl Iterator<Item = &ClientId>,
@@ -454,7 +455,7 @@ impl TcpConnectionSniffer {
     }
 
     /// Sends a [`DaemonTcp`] message back to the client with `client_id`.
-    #[tracing::instrument(level = "trace", skip(self, message))]
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn send_message_to_client(
         &mut self,
         client_id: &ClientId,
@@ -515,6 +516,11 @@ impl TcpConnectionSniffer {
                 let client_ids = self.port_subscriptions.get_topic_subscribers(dest_port);
                 trace!("client_ids {:#?}", client_ids);
 
+                // TODO(alex) [high] 2023-04-21: This `local_address` is the address we should be
+                // setting for the user app.
+                //
+                // Could we set up the filter to start only when `listen` is called, using the bound
+                // user address? Instead of starting with an empty "drop all".
                 let message = DaemonTcp::NewConnection(NewTcpConnection {
                     destination_port: dest_port,
                     source_port,

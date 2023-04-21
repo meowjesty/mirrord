@@ -10,5 +10,8 @@ pub struct BindSocketRequest {
     pub protocol: i32,
 }
 
+#[must_use]
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
-pub struct BindSocketResponse;
+pub struct BindSocketResponse {
+    pub bound_remote: Option<SocketAddr>,
+}

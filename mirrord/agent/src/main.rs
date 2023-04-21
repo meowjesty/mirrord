@@ -430,6 +430,14 @@ impl ClientConnectionHandler {
                 }) => {
                     // TODO(alex) [high] 2023-04-10:
                     // 4. Drop the socket.
+                    //
+                    // ADD(alex) [high] 2023-04-21:
+                    // - (a) We should bind the remote address?
+                    // - (b) A random address in the agent?
+                    // - (c) A random address in the remote's network namespace?
+                    // - (d) User specified address in the agent?
+                    // - (e) User specified address in the remote's network namespace?
+
                     // We use this socket just to check if the `bind` address is available.
                     let bind_result =
                         socket2::Socket::new(domain.into(), type_.into(), Some(protocol.into()))
@@ -437,12 +445,13 @@ impl ClientConnectionHandler {
                             .and_then(|temporary_socket| {
                                 trace!("Checking bind address {address:#?}");
                                 temporary_socket.bind(&address.into())?;
+                                let bound_remote = temporary_socket.local_addr()?.as_socket();
 
                                 let fd = temporary_socket.into_raw_fd();
                                 nix::unistd::close(fd).unwrap();
                                 trace!("Closing temporary socket fd {fd:#?}");
 
-                                Ok(BindSocketResponse)
+                                Ok(BindSocketResponse { bound_remote })
                             });
 
                     self.respond(DaemonMessage::Socket(SocketResponse::Bind(bind_result)))

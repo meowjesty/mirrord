@@ -226,17 +226,17 @@ pub(super) fn bind(
 
     let (socket_channel_tx, socket_channel_rx) = oneshot::channel();
     let bind = Bind {
-        address: requested_address,
+        address: requested_address.clone(),
         domain: socket.domain,
         type_: socket.type_,
         protocol: socket.protocol,
         socket_channel_tx,
     };
     blocking_send_hook_message(HookMessage::Socket(SocketOperation::Bind(bind)))?;
-    socket_channel_rx.blocking_recv()??;
+    let BindSocketResponse { bound_remote } = socket_channel_rx.blocking_recv()??;
 
     Arc::get_mut(&mut socket).unwrap().state = SocketState::Bound(Bound {
-        requested_address,
+        requested_address: bound_remote.unwrap_or(requested_address),
         mirror_address,
     });
 

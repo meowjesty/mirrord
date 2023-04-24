@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     time::Duration,
 };
@@ -8,7 +8,7 @@ use std::{
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{HttpRequest, LayerTcp, NewTcpConnection, TcpClose, TcpData},
-    ClientMessage, ConnectionId,
+    ClientMessage, ConnectionId, Port,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -113,7 +113,7 @@ impl Borrow<ConnectionId> for Connection {
 /// Handles traffic mirroring
 #[derive(Default)]
 pub struct TcpMirrorHandler {
-    ports: HashSet<Listen>,
+    listeners: HashSet<Listen>,
     connections: HashSet<Connection>,
     /// LocalPort:RemotePort mapping.
     port_mapping: BiMap<u16, u16>,
@@ -182,12 +182,12 @@ impl TcpHandler for TcpMirrorHandler {
         Ok(())
     }
 
-    fn ports(&self) -> &HashSet<Listen> {
-        &self.ports
+    fn listeners(&self) -> &HashSet<Listen> {
+        &self.listeners
     }
 
-    fn ports_mut(&mut self) -> &mut HashSet<Listen> {
-        &mut self.ports
+    fn listeners_mut(&mut self) -> &mut HashSet<Listen> {
+        &mut self.listeners
     }
 
     fn port_mapping_ref(&self) -> &BiMap<u16, u16> {
@@ -201,16 +201,18 @@ impl TcpHandler for TcpMirrorHandler {
         tx: &Sender<ClientMessage>,
     ) -> Result<()> {
         self.apply_port_mapping(&mut listen);
-        let request_port = listen.requested_port;
+        let requested_address = listen.requested_address;
 
-        if !self.ports_mut().insert(listen) {
-            info!("Port {request_port} already listening, might be on different address",);
-            return Ok(());
+        if !self.listeners_mut().insert(listen) {
+            warn!("Already listening on {requested_address:#?}.");
+            Err(LayerError::ListenerAlreadyExists(requested_address))?
         }
 
-        tx.send(ClientMessage::Tcp(LayerTcp::PortSubscribe(request_port)))
-            .await
-            .map_err(From::from)
+        tx.send(ClientMessage::Tcp(LayerTcp::PortSubscribe(
+            requested_address.port(),
+        )))
+        .await
+        .map_err(From::from)
     }
 
     /// This should never be called here. This exists because we have one trait for mirror and

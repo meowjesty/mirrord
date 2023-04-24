@@ -90,7 +90,7 @@ async fn handle_response(
 }
 
 pub struct TcpStealHandler {
-    ports: HashSet<Listen>,
+    listeners: HashSet<Listen>,
     write_streams: HashMap<ConnectionId, WriteHalf<TcpStream>>,
     read_streams: StreamMap<ConnectionId, ReaderStream<ReadHalf<TcpStream>>>,
 
@@ -201,12 +201,12 @@ impl TcpHandler for TcpStealHandler {
         Ok(())
     }
 
-    fn ports(&self) -> &HashSet<Listen> {
-        &self.ports
+    fn listeners(&self) -> &HashSet<Listen> {
+        &self.listeners
     }
 
-    fn ports_mut(&mut self) -> &mut HashSet<Listen> {
-        &mut self.ports
+    fn listeners_mut(&mut self) -> &mut HashSet<Listen> {
+        &mut self.listeners
     }
 
     fn port_mapping_ref(&self) -> &BiMap<u16, u16> {
@@ -219,19 +219,20 @@ impl TcpHandler for TcpStealHandler {
         mut listen: Listen,
         tx: &Sender<ClientMessage>,
     ) -> Result<(), LayerError> {
-        let original_port = listen.requested_port;
+        let original_address = listen.requested_address;
         self.apply_port_mapping(&mut listen);
-        let request_port = listen.requested_port;
+        let requested_address = listen.requested_address;
 
-        if !self.ports_mut().insert(listen) {
-            info!("Port {request_port} already listening, might be on different address");
-            return Ok(());
+        if !self.listeners_mut().insert(listen) {
+            warn!("Already listening on {requested_address:#?}.");
+            Err(LayerError::ListenerAlreadyExists(requested_address))?
         }
 
-        let steal_type = if self.http_ports.contains(&original_port) && let Some(filter_str) = self.http_filter.take() {
-            FilteredHttp(request_port, Filter::new(filter_str)?)
+        let steal_type = if self.http_ports.contains(&original_address.port()) && 
+            let Some(filter_str) = self.http_filter.take() {
+            FilteredHttp(requested_address.port(), Filter::new(filter_str)?)
         } else {
-            All(request_port)
+            All(requested_address.port())
         };
 
         tx.send(ClientMessage::TcpSteal(LayerTcpSteal::PortSubscribe(
@@ -250,7 +251,7 @@ impl TcpStealHandler {
         port_mapping: BiMap<u16, u16>,
     ) -> Self {
         Self {
-            ports: Default::default(),
+            listeners: Default::default(),
             write_streams: Default::default(),
             read_streams: Default::default(),
             http_request_senders: Default::default(),
@@ -305,7 +306,7 @@ impl TcpStealHandler {
         http_request: HttpRequest,
     ) -> Result<(), LayerError> {
         let listen = self
-            .ports()
+            .listeners()
             .get(&http_request.port)
             .ok_or(LayerError::PortNotFound(http_request.port))?;
         let addr: SocketAddr = listen.into();

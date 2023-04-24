@@ -1,7 +1,7 @@
 /// Tcp Traffic management, common code for stealing & mirroring
 use std::{
     borrow::Borrow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     net::SocketAddr,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -29,15 +29,15 @@ pub(crate) enum TcpIncoming {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Listen {
-    pub mirror_port: Port,
-    pub requested_port: Port,
+    pub mirror_address: SocketAddr,
+    pub requested_address: SocketAddr,
     pub ipv6: bool,
     pub id: SocketId,
 }
 
 impl PartialEq for Listen {
     fn eq(&self, other: &Self) -> bool {
-        self.requested_port == other.requested_port
+        self.requested_address == other.requested_address
     }
 }
 
@@ -45,40 +45,27 @@ impl Eq for Listen {}
 
 impl Hash for Listen {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.requested_port.hash(state);
-    }
-}
-
-impl Borrow<Port> for Listen {
-    fn borrow(&self) -> &Port {
-        &self.requested_port
-    }
-}
-
-impl From<&Listen> for SocketAddr {
-    fn from(listen: &Listen) -> Self {
-        let address = if listen.ipv6 {
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), listen.mirror_port)
-        } else {
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), listen.mirror_port)
-        };
-
-        debug_assert_eq!(address.port(), listen.mirror_port);
-        address
+        self.requested_address.hash(state);
     }
 }
 
 pub(crate) trait TcpHandler {
-    fn ports(&self) -> &HashSet<Listen>;
-    fn ports_mut(&mut self) -> &mut HashSet<Listen>;
+    fn listeners(&self) -> &HashSet<Listen>;
+    fn listeners_mut(&mut self) -> &mut HashSet<Listen>;
     fn port_mapping_ref(&self) -> &BiMap<u16, u16>;
 
     /// Modify `Listen` to match local port to remote port based on mapping
     /// If no mapping is found, the port is not modified
     fn apply_port_mapping(&self, listen: &mut Listen) {
-        if let Some(mapped_port) = self.port_mapping_ref().get_by_left(&listen.requested_port) {
-            trace!("mapping port {} to {mapped_port}", &listen.requested_port);
-            listen.requested_port = *mapped_port;
+        if let Some(mapped_port) = self
+            .port_mapping_ref()
+            .get_by_left(&listen.requested_address.port())
+        {
+            trace!(
+                "mapping port {} to {mapped_port}",
+                &listen.requested_address
+            );
+            listen.requested_address.set_port(*mapped_port);
         }
     }
 
@@ -146,7 +133,7 @@ pub(crate) trait TcpHandler {
             .unwrap_or(tcp_connection.destination_port);
 
         let listen = self
-            .ports()
+            .listeners()
             .get(&remote_destination_port)
             .ok_or(LayerError::PortNotFound(remote_destination_port))?;
 

@@ -123,6 +123,22 @@ pub(super) fn bind(
         .get()
         .copied()
         .expect("Should be set during initialization!");
+    // TODO(alex) [high] 2023-04-24: Use full address instead of only port for mirror and steal.
+
+    // Check if the user's requested address isn't already in use, even though it's not actually
+    // bound, as we bind to a fake address, but if we don't check for this then we're changing
+    // normal socket behavior (see issue #1123).
+    if SOCKETS.iter().any(|socket| match &socket.state {
+        SocketState::Initialized => false,
+        SocketState::Bound(bound) | SocketState::Listening(bound) => {
+            bound.requested_address == requested_address
+        }
+        SocketState::Connected(connected) => SocketAddr::try_from(connected.local_address.clone())
+            .map(|connected_address| connected_address == requested_address)
+            .unwrap_or_default(),
+    }) {
+        Err(HookError::AddressAlreadyBound(requested_address))?;
+    }
 
     let mut socket = {
         SOCKETS
@@ -227,8 +243,8 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
             }
 
             blocking_send_hook_message(HookMessage::Tcp(TcpIncoming::Listen(Listen {
-                mirror_port: address.port(),
-                requested_port: requested_address.port(),
+                mirror_address: address,
+                requested_address,
                 ipv6: address.is_ipv6(),
                 id: socket.id,
             })))?;

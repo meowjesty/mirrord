@@ -1,6 +1,6 @@
 use std::{
-    collections::{HashMap},
-    net::{SocketAddr, Ipv4Addr},
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddr},
 };
 
 use bimap::BiMap;
@@ -304,8 +304,8 @@ impl TcpStealHandler {
         &mut self,
         http_request: HttpRequest,
     ) -> Result<(), LayerError> {
-        let address =  SocketAddr::from(((Ipv4Addr::LOCALHOST), http_request.port)); 
-       let listen = self
+        let address = SocketAddr::from(((Ipv4Addr::LOCALHOST), http_request.port));
+        let listen = self
             .listeners()
             .get(&address)
             .ok_or(LayerError::AddressNotFound(address))?;

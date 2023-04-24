@@ -1,8 +1,5 @@
 use core::fmt::Display;
-use std::{
-    fmt,
-    net::{SocketAddr},
-};
+use std::{fmt, net::SocketAddr};
 
 use bincode::{Decode, Encode};
 use bytes::Bytes;

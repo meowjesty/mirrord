@@ -245,7 +245,6 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
             blocking_send_hook_message(HookMessage::Tcp(TcpIncoming::Listen(Listen {
                 mirror_address: address,
                 requested_address,
-                ipv6: address.is_ipv6(),
                 id: socket.id,
             })))?;
 

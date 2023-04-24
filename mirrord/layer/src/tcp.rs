@@ -29,7 +29,6 @@ pub(crate) enum TcpIncoming {
 pub(crate) struct Listen {
     pub mirror_address: SocketAddr,
     pub requested_address: SocketAddr,
-    pub ipv6: bool,
     pub id: SocketId,
 }
 

@@ -154,9 +154,6 @@ pub(crate) enum LayerError {
     #[error("mirrord-layer: No connection found for id `{0}`!")]
     NoConnectionId(ConnectionId),
 
-    #[error("mirrord-layer: Failed to find port `{0}`!")]
-    PortNotFound(u16),
-
     #[error("mirrord-layer: Unmatched pong!")]
     UnmatchedPong,
 

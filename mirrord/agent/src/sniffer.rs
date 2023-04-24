@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{SocketAddr},
 };
 
 use mirrord_protocol::{

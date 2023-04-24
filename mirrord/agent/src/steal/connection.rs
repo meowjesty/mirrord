@@ -22,7 +22,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
-use tracing::error;
+use tracing::{debug, error};
 
 use super::*;
 use crate::{
@@ -299,6 +299,7 @@ impl TcpConnectionStealer {
     }
 
     /// Forward the whole connection to given client.
+    #[tracing::instrument(level = "trace", skip(self, stream))]
     async fn steal_connection(
         &mut self,
         client_id: ClientId,
@@ -308,7 +309,8 @@ impl TcpConnectionStealer {
     ) -> Result<()> {
         let connection_id = self.index_allocator.next_index().unwrap();
 
-        let local_address = stream.local_addr()?.ip();
+        let local_address = SocketAddr::from((stream.local_addr()?.ip(), port));
+        debug!("local_address {local_address:#?}");
 
         let (read_half, write_half) = tokio::io::split(stream);
         self.write_streams.insert(connection_id, write_half);
@@ -323,9 +325,7 @@ impl TcpConnectionStealer {
 
         let new_connection = DaemonTcp::NewConnection(NewTcpConnection {
             connection_id,
-            destination_port: port,
-            source_port: address.port(),
-            remote_address: address.ip(),
+            remote_address: SocketAddr::from((address.ip(), address.port())),
             local_address,
         });
 

@@ -198,6 +198,9 @@ pub(crate) enum LayerError {
 
     #[error("mirrord-layer: Tried to listen on address `{0:#?}` which is already listening!")]
     ListenerAlreadyExists(SocketAddr),
+
+    #[error("mirrord-layer: Failed to find address `{0}`!")]
+    AddressNotFound(SocketAddr),
 }
 
 impl From<SerializationError> for LayerError {

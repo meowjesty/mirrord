@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use std::{io::ErrorKind, net::IpAddr, sync::Arc};
+    use std::{
+        io::ErrorKind,
+        net::{IpAddr, SocketAddr},
+        sync::Arc,
+    };
 
     use actix_codec::Framed;
     use futures::SinkExt;
@@ -108,10 +112,8 @@ mod tests {
             new_conn_msg,
             DaemonMessage::Tcp(DaemonTcp::NewConnection(NewTcpConnection {
                 connection_id: 0,
-                remote_address: IpAddr::V4("127.0.0.1".parse().unwrap()),
-                local_address: IpAddr::V4("127.0.0.1".parse().unwrap()),
-                destination_port: 1337,
-                source_port: port
+                remote_address: SocketAddr::from((IpAddr::V4("127.0.0.1".parse().unwrap()), port)),
+                local_address: SocketAddr::from((IpAddr::V4("127.0.0.1".parse().unwrap()), 1337)),
             }))
         );
 

@@ -1,16 +1,14 @@
 /// Tcp Traffic management, common code for stealing & mirroring
 use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     hash::{Hash, Hasher},
     net::SocketAddr,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use bimap::BiMap;
 use mirrord_protocol::{
     tcp::{DaemonTcp, HttpRequest, NewTcpConnection, TcpClose, TcpData},
-    ClientMessage, Port, ResponseError,
+    ClientMessage, ResponseError,
 };
 use tokio::{net::TcpStream, sync::mpsc::Sender};
 use tracing::{debug, error, log::trace};
@@ -50,8 +48,11 @@ impl Hash for Listen {
 }
 
 pub(crate) trait TcpHandler {
-    fn listeners(&self) -> &HashSet<Listen>;
-    fn listeners_mut(&mut self) -> &mut HashSet<Listen>;
+    /// Listeners keyed by the requested address.
+    fn listeners(&self) -> &HashMap<SocketAddr, Listen>;
+
+    /// Listeners (mutable) keyed by the requested address.
+    fn listeners_mut(&mut self) -> &mut HashMap<SocketAddr, Listen>;
     fn port_mapping_ref(&self) -> &BiMap<u16, u16>;
 
     /// Modify `Listen` to match local port to remote port based on mapping
@@ -122,27 +123,27 @@ pub(crate) trait TcpHandler {
         &mut self,
         tcp_connection: &NewTcpConnection,
     ) -> Result<TcpStream, LayerError> {
-        let remote_destination_port = tcp_connection.destination_port;
         let local_destination_port = self
             .port_mapping_ref()
-            .get_by_right(&tcp_connection.destination_port)
+            .get_by_right(&tcp_connection.remote_address.port())
             .map(|p| {
-                trace!("mapping port {} to {p}", &tcp_connection.destination_port);
+                trace!(
+                    "mapping port {} to {p}",
+                    &tcp_connection.remote_address.port()
+                );
                 *p
             })
-            .unwrap_or(tcp_connection.destination_port);
+            .unwrap_or(tcp_connection.remote_address.port());
 
         let listen = self
             .listeners()
-            .get(&remote_destination_port)
-            .ok_or(LayerError::PortNotFound(remote_destination_port))?;
-
-        let addr: SocketAddr = listen.into();
+            .get(&tcp_connection.remote_address)
+            .ok_or(LayerError::AddressNotFound(tcp_connection.remote_address))?;
 
         let info = SocketInformation::new(
-            SocketAddr::new(tcp_connection.remote_address, tcp_connection.source_port),
+            tcp_connection.remote_address,
             // we want local so app won't know we did the mapping.
-            SocketAddr::new(tcp_connection.local_address, local_destination_port),
+            SocketAddr::from((tcp_connection.local_address.ip(), local_destination_port)),
         );
 
         CONNECTION_QUEUE.add(listen.id, info);
@@ -150,7 +151,9 @@ pub(crate) trait TcpHandler {
         #[allow(clippy::let_and_return)]
         let tcp_stream = {
             let _ = DetourGuard::new();
-            TcpStream::connect(addr).await.map_err(From::from)
+            TcpStream::connect(listen.mirror_address)
+                .await
+                .map_err(From::from)
         };
 
         tcp_stream

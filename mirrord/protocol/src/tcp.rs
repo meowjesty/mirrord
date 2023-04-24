@@ -1,5 +1,8 @@
 use core::fmt::Display;
-use std::{fmt, net::IpAddr};
+use std::{
+    fmt,
+    net::{IpAddr, SocketAddr},
+};
 
 use bincode::{Decode, Encode};
 use bytes::Bytes;
@@ -16,10 +19,8 @@ use crate::{ConnectionId, Port, RemoteResult, RequestId};
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct NewTcpConnection {
     pub connection_id: ConnectionId,
-    pub remote_address: IpAddr,
-    pub destination_port: Port,
-    pub source_port: Port,
-    pub local_address: IpAddr,
+    pub remote_address: SocketAddr,
+    pub local_address: SocketAddr,
 }
 
 #[derive(Encode, Decode, PartialEq, Eq, Clone)]

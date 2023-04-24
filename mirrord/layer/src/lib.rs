@@ -14,6 +14,7 @@
 #![feature(pointer_byte_offsets)]
 #![feature(is_some_and)]
 #![feature(async_fn_in_trait)]
+#![feature(map_try_insert)]
 #![allow(rustdoc::private_intra_doc_links)]
 #![allow(incomplete_features)]
 #![warn(clippy::indexing_slicing)]

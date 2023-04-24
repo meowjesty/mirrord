@@ -2,6 +2,7 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
+    net::SocketAddr,
     time::Duration,
 };
 
@@ -113,7 +114,7 @@ impl Borrow<ConnectionId> for Connection {
 /// Handles traffic mirroring
 #[derive(Default)]
 pub struct TcpMirrorHandler {
-    listeners: HashSet<Listen>,
+    listeners: HashMap<SocketAddr, Listen>,
     connections: HashSet<Connection>,
     /// LocalPort:RemotePort mapping.
     port_mapping: BiMap<u16, u16>,
@@ -182,11 +183,11 @@ impl TcpHandler for TcpMirrorHandler {
         Ok(())
     }
 
-    fn listeners(&self) -> &HashSet<Listen> {
+    fn listeners(&self) -> &HashMap<SocketAddr, Listen> {
         &self.listeners
     }
 
-    fn listeners_mut(&mut self) -> &mut HashSet<Listen> {
+    fn listeners_mut(&mut self) -> &mut HashMap<SocketAddr, Listen> {
         &mut self.listeners
     }
 
@@ -203,10 +204,9 @@ impl TcpHandler for TcpMirrorHandler {
         self.apply_port_mapping(&mut listen);
         let requested_address = listen.requested_address;
 
-        if !self.listeners_mut().insert(listen) {
-            warn!("Already listening on {requested_address:#?}.");
-            Err(LayerError::ListenerAlreadyExists(requested_address))?
-        }
+        self.listeners_mut()
+            .try_insert(listen.requested_address, listen)
+            .map_err(|_| LayerError::ListenerAlreadyExists(requested_address))?;
 
         tx.send(ClientMessage::Tcp(LayerTcp::PortSubscribe(
             requested_address.port(),

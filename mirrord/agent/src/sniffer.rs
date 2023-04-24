@@ -33,41 +33,31 @@ use crate::{
 
 #[derive(Debug, Eq, Copy, Clone)]
 pub struct TcpSessionIdentifier {
-    source_addr: Ipv4Addr,
-    dest_addr: Ipv4Addr,
-    source_port: u16,
-    dest_port: u16,
+    /// The remote address.
+    source_address: SocketAddr,
+
+    /// Local address.
+    destination_address: SocketAddr,
 }
 
 impl PartialEq for TcpSessionIdentifier {
     /// It's the same session if 4 tuple is same/opposite.
     fn eq(&self, other: &TcpSessionIdentifier) -> bool {
-        self.source_addr == other.source_addr
-            && self.dest_addr == other.dest_addr
-            && self.source_port == other.source_port
-            && self.dest_port == other.dest_port
-            || self.source_addr == other.dest_addr
-                && self.dest_addr == other.source_addr
-                && self.source_port == other.dest_port
-                && self.dest_port == other.source_port
+        self.source_address == other.source_address
+            && self.destination_address == other.destination_address
+            || self.source_address == other.destination_address
+            || other.source_address == self.destination_address
     }
 }
 
 impl Hash for TcpSessionIdentifier {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if self.source_addr > self.dest_addr {
-            self.source_addr.hash(state);
-            self.dest_addr.hash(state);
+        if self.source_address > self.destination_address {
+            self.source_address.hash(state);
+            self.destination_address.hash(state);
         } else {
-            self.dest_addr.hash(state);
-            self.source_addr.hash(state);
-        }
-        if self.source_port > self.dest_port {
-            self.source_port.hash(state);
-            self.dest_port.hash(state);
-        } else {
-            self.dest_port.hash(state);
-            self.source_port.hash(state);
+            self.destination_address.hash(state);
+            self.source_address.hash(state);
         }
     }
 }
@@ -153,23 +143,21 @@ struct TcpPacketData {
 fn get_tcp_packet(eth_packet: Vec<u8>) -> Option<(TcpSessionIdentifier, TcpPacketData)> {
     let eth_packet = EthernetPacket::new(&eth_packet[..])?;
     let ip_packet = match eth_packet.get_ethertype() {
-        EtherTypes::Ipv4 => Ipv4Packet::new(eth_packet.payload())?,
-        _ => return None,
-    };
+        EtherTypes::Ipv4 => Ipv4Packet::new(eth_packet.payload()),
+        _ => None,
+    }?;
 
     let tcp_packet = match ip_packet.get_next_level_protocol() {
-        IpNextHeaderProtocols::Tcp => TcpPacket::new(ip_packet.payload())?,
-        _ => return None,
-    };
-
-    let dest_port = tcp_packet.get_destination();
-    let source_port = tcp_packet.get_source();
+        IpNextHeaderProtocols::Tcp => TcpPacket::new(ip_packet.payload()),
+        _ => None,
+    }?;
 
     let identifier = TcpSessionIdentifier {
-        source_addr: ip_packet.get_source(),
-        dest_addr: ip_packet.get_destination(),
-        source_port,
-        dest_port,
+        source_address: SocketAddr::from((ip_packet.get_source(), tcp_packet.get_source())),
+        destination_address: SocketAddr::from((
+            ip_packet.get_destination(),
+            tcp_packet.get_destination(),
+        )),
     };
 
     trace!("identifier {identifier:?}");
@@ -480,17 +468,10 @@ impl TcpConnectionSniffer {
             None => return Ok(()),
         };
 
-        let dest_port = identifier.dest_port;
-        let source_port = identifier.source_port;
         let tcp_flags = tcp_packet.flags;
-        trace!(
-            "dest_port {:#?} | source_port {:#?} | tcp_flags {:#?}",
-            dest_port,
-            source_port,
-            tcp_flags
-        );
+        debug!("identifier {identifier:#?} | tcp_flags {tcp_flags:#?}",);
 
-        let is_client_packet = self.qualified_port(dest_port);
+        let is_client_packet = self.qualified_port(identifier.destination_address.port());
 
         let session = match self.sessions.remove(&identifier) {
             Some(session) => session,
@@ -512,15 +493,15 @@ impl TcpConnectionSniffer {
                     }
                 };
 
-                let client_ids = self.port_subscriptions.get_topic_subscribers(dest_port);
+                let client_ids = self
+                    .port_subscriptions
+                    .get_topic_subscribers(identifier.destination_address.port());
                 trace!("client_ids {:#?}", client_ids);
 
                 let message = DaemonTcp::NewConnection(NewTcpConnection {
-                    destination_port: dest_port,
-                    source_port,
                     connection_id: id,
-                    remote_address: IpAddr::V4(identifier.source_addr),
-                    local_address: IpAddr::V4(identifier.dest_addr),
+                    remote_address: identifier.source_address,
+                    local_address: identifier.destination_address,
                 });
                 trace!("message {:#?}", message);
 

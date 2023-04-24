@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    net::SocketAddr,
+    net::{SocketAddr, Ipv4Addr},
 };
 
 use bimap::BiMap;
@@ -90,7 +90,7 @@ async fn handle_response(
 }
 
 pub struct TcpStealHandler {
-    listeners: HashSet<Listen>,
+    listeners: HashMap<SocketAddr, Listen>,
     write_streams: HashMap<ConnectionId, WriteHalf<TcpStream>>,
     read_streams: StreamMap<ConnectionId, ReaderStream<ReadHalf<TcpStream>>>,
 
@@ -201,11 +201,11 @@ impl TcpHandler for TcpStealHandler {
         Ok(())
     }
 
-    fn listeners(&self) -> &HashSet<Listen> {
+    fn listeners(&self) -> &HashMap<SocketAddr, Listen> {
         &self.listeners
     }
 
-    fn listeners_mut(&mut self) -> &mut HashSet<Listen> {
+    fn listeners_mut(&mut self) -> &mut HashMap<SocketAddr, Listen> {
         &mut self.listeners
     }
 
@@ -223,10 +223,9 @@ impl TcpHandler for TcpStealHandler {
         self.apply_port_mapping(&mut listen);
         let requested_address = listen.requested_address;
 
-        if !self.listeners_mut().insert(listen) {
-            warn!("Already listening on {requested_address:#?}.");
-            Err(LayerError::ListenerAlreadyExists(requested_address))?
-        }
+        self.listeners_mut()
+            .try_insert(listen.requested_address, listen)
+            .map_err(|_| LayerError::ListenerAlreadyExists(requested_address))?;
 
         let steal_type = if self.http_ports.contains(&original_address.port()) && 
             let Some(filter_str) = self.http_filter.take() {
@@ -305,26 +304,27 @@ impl TcpStealHandler {
         &mut self,
         http_request: HttpRequest,
     ) -> Result<(), LayerError> {
-        let listen = self
+        let address =  SocketAddr::from(((Ipv4Addr::LOCALHOST), http_request.port)); 
+       let listen = self
             .listeners()
-            .get(&http_request.port)
-            .ok_or(LayerError::PortNotFound(http_request.port))?;
-        let addr: SocketAddr = listen.into();
+            .get(&address)
+            .ok_or(LayerError::AddressNotFound(address))?;
+
         let connection_id = http_request.connection_id;
         let port = http_request.port;
 
         let (request_sender, request_receiver) = channel(1024);
 
         let response_sender = self.http_response_sender.clone();
-
         let http_version = http_request.version();
+        let mirror_address = listen.mirror_address;
 
         tokio::spawn(async move {
             trace!("HTTP/{http_version:?} client task started.");
             let connection_task_result = match http_version {
                 hyper::Version::HTTP_2 => {
                     ConnectionTask::<HttpV2>::new(
-                        addr,
+                        mirror_address,
                         request_receiver,
                         response_sender,
                         port,
@@ -339,7 +339,7 @@ impl TcpStealHandler {
                 }
                 _http_v1 => {
                     ConnectionTask::<HttpV1>::new(
-                        addr,
+                        mirror_address,
                         request_receiver,
                         response_sender,
                         port,

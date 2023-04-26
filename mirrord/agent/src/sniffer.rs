@@ -36,7 +36,7 @@ pub struct TcpSessionIdentifier {
     /// The remote address.
     source_address: SocketAddr,
 
-    /// Local address.
+    /// Local address of the impersonated pod, retrievable with `kubectl get pod -o wide`.
     destination_address: SocketAddr,
 }
 

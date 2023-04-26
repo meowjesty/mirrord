@@ -16,7 +16,7 @@ use mirrord_protocol::{
 };
 use socket2::SockAddr;
 use tokio::sync::oneshot;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 use super::{hooks::*, *};
 use crate::{
@@ -119,11 +119,40 @@ pub(super) fn bind(
     let requested_address = SocketAddr::try_from_raw(raw_address, address_length)?;
     let requested_port = requested_address.port();
 
+    let pod_ip: IpAddr = std::env::var("IMPERSONATED_POD_IP")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let requested_address = SocketAddr::from((pod_ip, requested_port));
+    info!("pod_ip {:#?}", std::env::var("IMPERSONATED_POD_IP"));
+
+    // TODO(alex) [high] 2023-04-25: Check if its localhost or unspecified, then check if port
+    // matches the listening pod's port?
+    //
+    // Need to send a message to the layer loop, then from layer to kube_api as a `InternalMessage`
+    // to avoid `ClientMessage` clutter, and finally the kube_api retrieves pod IP, and responds
+    // back through some internal channel to the layer -> back to here.
+
     let ignore_localhost = INCOMING_IGNORE_LOCALHOST
         .get()
         .copied()
         .expect("Should be set during initialization!");
-    // TODO(alex) [high] 2023-04-24: Use full address instead of only port for mirror and steal.
+    // TODO(alex) [high] 2023-04-24: Send a `bind` request to the agent, which in turn gets
+    // the service ip (do we need to go through the agent to do this?).
+    //
+    // The ips don't match though, we get a new connection with:
+    // - `remote_address` 10.244.0.1:11071 (think this is the request ip from curl);
+    // - `local_address` 10.244.1.96:80;
+    //
+    // While the service is running on 10.104.239.78:80.
+    //
+    // The agent ip is 10.244.1.102
+    //
+    // ADD(alex) [high] 2023-04-25: The `local_address` is the impersonated pod's address that you
+    // can get with `kubectl get pod -o wide`.
+    //
+    // ADD(alex) [high] 2023-04-26: The address is correct, but the port is not, as we `bind`
+    // on some random port `122221`, but should be whatever port the server is listening on.
 
     // Check if the user's requested address isn't already in use, even though it's not actually
     // bound, as we bind to a fake address, but if we don't check for this then we're changing
@@ -214,7 +243,9 @@ pub(super) fn bind(
         address,
     });
 
+    debug!("socket {socket:#?}");
     SOCKETS.insert(sockfd, socket);
+    debug!("SOCKETS {SOCKETS:#?}");
 
     Detour::Success(bind_result)
 }

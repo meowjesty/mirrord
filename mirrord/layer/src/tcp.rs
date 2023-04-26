@@ -134,9 +134,13 @@ pub(crate) trait TcpHandler {
             })
             .unwrap_or(tcp_connection.remote_address.port());
 
+        debug!(
+            "new tcp {tcp_connection:#?} is in listeners {:#?}?",
+            self.listeners()
+        );
         let listen = self
             .listeners()
-            .get(&tcp_connection.remote_address)
+            .get(&tcp_connection.local_address)
             .ok_or(LayerError::AddressNotFound(tcp_connection.remote_address))?;
 
         let info = SocketInformation::new(
@@ -145,7 +149,9 @@ pub(crate) trait TcpHandler {
             SocketAddr::from((tcp_connection.local_address.ip(), local_destination_port)),
         );
 
+        debug!("adding {info:#?} to the connection queue");
         CONNECTION_QUEUE.add(listen.id, info);
+        debug!("connection queue {CONNECTION_QUEUE:#?}");
 
         #[allow(clippy::let_and_return)]
         let tcp_stream = {

@@ -195,7 +195,7 @@ impl TcpHandler for TcpMirrorHandler {
         &self.port_mapping
     }
 
-    #[tracing::instrument(level = "trace", skip(self, tx))]
+    #[tracing::instrument(level = "debug", skip(self, tx))]
     async fn handle_listen(
         &mut self,
         mut listen: Listen,
@@ -207,6 +207,7 @@ impl TcpHandler for TcpMirrorHandler {
         self.listeners_mut()
             .try_insert(listen.requested_address, listen)
             .map_err(|_| LayerError::ListenerAlreadyExists(requested_address))?;
+        debug!("listeners {:#?}", self.listeners);
 
         tx.send(ClientMessage::Tcp(LayerTcp::PortSubscribe(
             requested_address.port(),

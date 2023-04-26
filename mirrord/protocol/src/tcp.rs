@@ -17,6 +17,8 @@ use crate::{ConnectionId, Port, RemoteResult, RequestId};
 pub struct NewTcpConnection {
     pub connection_id: ConnectionId,
     pub remote_address: SocketAddr,
+
+    /// Local address of the impersonated pod, retrievable with `kubectl get pod -o wide`.
     pub local_address: SocketAddr,
 }
 

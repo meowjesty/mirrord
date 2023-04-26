@@ -1,4 +1,7 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    net::IpAddr,
+};
 
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Pod};
 use kube::{api::ListParams, Api, Client};
@@ -89,6 +92,20 @@ impl RuntimeData {
             .next()
             .ok_or_else(|| KubeApiError::ContainerRuntimeParseError(container_id_full.to_string()))?
             .to_owned();
+
+        let impersonated_pod_address = pod
+            .status
+            .as_ref()
+            .ok_or(KubeApiError::PodStatusNotFound)?
+            .pod_ip
+            .as_ref()
+            .ok_or(KubeApiError::PodStatusNotFound)?
+            .parse::<IpAddr>()
+            .map_err(|_| KubeApiError::PodSpecNotFound)?;
+
+        // TODO(alex) [low] 2024-04-25: Ugly hack to get the pod ip address for `bind`.
+        // This will break if the pod ip can change, plus it's cluttering environment variables.
+        std::env::set_var("IMPERSONATED_POD_IP", impersonated_pod_address.to_string());
 
         Ok(RuntimeData {
             pod_name,

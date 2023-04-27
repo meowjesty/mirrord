@@ -94,15 +94,38 @@ impl SocketInformation {
 
 #[derive(Debug)]
 pub struct Connected {
-    /// Remote address we're connected to
+    /// Remote address we're connected to.
     remote_address: SocketAddress,
-    /// Local address (pod-wise)
+
+    /// Local address (pod-wise).
+    ///
+    /// ## Example
+    ///
+    /// ```sh
+    /// $ kubectl get pod -o wide
+    ///
+    /// NAME             READY   STATUS    IP       
+    /// impersonated-pod 0/1     Running   1.2.3.4
+    /// ```
+    ///
+    /// We would set this ip as `1.2.3.4:{port}` in [`bind`], where `{port}` is the user requested
+    /// port.
     local_address: SocketAddress,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bound {
+    /// Address originally requested by the user for [`bind`].
     requested_address: SocketAddr,
+
+    /// Impersonated pod's listening address when user requested `localhost`, or `0.0.0.0` for
+    /// [`bind`].
+    ///
+    /// Calls to [`getsockname`] will return this address.
+    faked_address: SocketAddr,
+
+    /// Actual bound address that we use to communicate between the user's listener socket and our
+    /// interceptor socket.
     address: SocketAddr,
 }
 

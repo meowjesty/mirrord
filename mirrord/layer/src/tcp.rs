@@ -29,12 +29,14 @@ pub(crate) enum TcpIncoming {
 pub(crate) struct Listen {
     pub mirror_address: SocketAddr,
     pub requested_address: SocketAddr,
+    pub faked_address: SocketAddr,
     pub id: SocketId,
 }
 
 impl PartialEq for Listen {
     fn eq(&self, other: &Self) -> bool {
         self.requested_address == other.requested_address
+            || self.faked_address == other.faked_address
     }
 }
 
@@ -56,17 +58,20 @@ pub(crate) trait TcpHandler {
 
     /// Modify `Listen` to match local port to remote port based on mapping
     /// If no mapping is found, the port is not modified
+    #[tracing::instrument(level = "debug", skip(self))]
     fn apply_port_mapping(&self, listen: &mut Listen) {
-        if let Some(mapped_port) = self
-            .port_mapping_ref()
-            .get_by_left(&listen.requested_address.port())
-        {
-            trace!(
-                "mapping port {} to {mapped_port}",
-                &listen.requested_address
-            );
-            listen.requested_address.set_port(*mapped_port);
-        }
+        debug!("port_mapping_ref {:#?}", self.port_mapping_ref());
+
+        // if let Some(mapped_port) = self
+        //     .port_mapping_ref()
+        //     .get_by_left(&listen.requested_address.port())
+        // {
+        //     debug!(
+        //         "mapping port {} to {mapped_port}",
+        //         &listen.requested_address
+        //     );
+        //     listen.requested_address.set_port(*mapped_port);
+        // }
     }
 
     /// Returns true to let caller know to keep running

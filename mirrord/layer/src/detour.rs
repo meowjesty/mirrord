@@ -320,6 +320,16 @@ impl<S> Detour<S> {
             _ => default,
         }
     }
+
+    #[inline]
+    #[allow(unused)]
+    pub(crate) fn inspect<F: FnOnce(&S)>(self, f: F) -> Self {
+        if let Detour::Success(ref s) = self {
+            f(s);
+        }
+
+        self
+    }
 }
 
 impl<S> Detour<S>

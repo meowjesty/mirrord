@@ -110,7 +110,7 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Detour<Raw
 
 /// Check if the socket is managed by us, if it's managed by us and it's not an ignored port,
 /// update the socket state.
-#[tracing::instrument(level = "trace", skip(raw_address))]
+#[tracing::instrument(level = "debug", skip(raw_address))]
 pub(super) fn bind(
     sockfd: c_int,
     raw_address: *const sockaddr,
@@ -118,13 +118,6 @@ pub(super) fn bind(
 ) -> Detour<i32> {
     let requested_address = SocketAddr::try_from_raw(raw_address, address_length)?;
     let requested_port = requested_address.port();
-
-    let pod_ip: IpAddr = std::env::var("IMPERSONATED_POD_IP")
-        .unwrap()
-        .parse()
-        .unwrap();
-    let requested_address = SocketAddr::from((pod_ip, requested_port));
-    info!("pod_ip {:#?}", std::env::var("IMPERSONATED_POD_IP"));
 
     // TODO(alex) [high] 2023-04-25: Check if its localhost or unspecified, then check if port
     // matches the listening pod's port?
@@ -154,15 +147,32 @@ pub(super) fn bind(
     // ADD(alex) [high] 2023-04-26: The address is correct, but the port is not, as we `bind`
     // on some random port `122221`, but should be whatever port the server is listening on.
 
-    // Check if the user's requested address isn't already in use, even though it's not actually
-    // bound, as we bind to a fake address, but if we don't check for this then we're changing
-    // normal socket behavior (see issue #1123).
+    let faked_address =
+        if requested_address.ip().is_unspecified() || requested_address.ip().is_loopback() {
+            let pod_ip = std::env::var("IMPERSONATED_POD_IP")
+                .unwrap_or_else(|_| requested_address.ip().to_string())
+                .parse()
+                .unwrap_or(requested_address.ip());
+
+            info!("pod_ip {:#?}", std::env::var("IMPERSONATED_POD_IP"));
+            SocketAddr::from((pod_ip, requested_port))
+        } else {
+            requested_address
+        };
+
+    debug!("faked_address {faked_address:#?} | requested_address {requested_address:#?}");
+
+    // Check if the user's requested/faked address isn't already in use, even though it's not
+    // actually bound, as we bind to a different address, but if we don't check for this then we're
+    // changing normal socket behavior (see issue #1123).
     if SOCKETS.iter().any(|socket| match &socket.state {
         SocketState::Initialized => false,
         SocketState::Bound(bound) | SocketState::Listening(bound) => {
-            bound.requested_address == requested_address
+            bound.requested_address == requested_address || bound.faked_address == faked_address
         }
         SocketState::Connected(connected) => SocketAddr::try_from(connected.local_address.clone())
+            // TODO(alex) [high] 2024-04-26: Do we need to check `faked_address` here as well?
+            // Test to see if the port changes without mirrord.
             .map(|connected_address| connected_address == requested_address)
             .unwrap_or_default(),
     }) {
@@ -240,6 +250,7 @@ pub(super) fn bind(
 
     Arc::get_mut(&mut socket).unwrap().state = SocketState::Bound(Bound {
         requested_address,
+        faked_address,
         address,
     });
 
@@ -252,7 +263,7 @@ pub(super) fn bind(
 
 /// Subscribe to the agent on the real port. Messages received from the agent on the real port will
 /// later be routed to the fake local port.
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug")]
 pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
     let mut socket = {
         SOCKETS
@@ -261,9 +272,12 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
             .bypass(Bypass::LocalFdNotFound(sockfd))?
     };
 
+    debug!("socket {socket:#?} | SOCKETS {SOCKETS:#?}");
+
     match socket.state {
         SocketState::Bound(Bound {
             requested_address,
+            faked_address,
             address,
         }) => {
             let listen_result = unsafe { FN_LISTEN(sockfd, backlog) };
@@ -276,11 +290,13 @@ pub(super) fn listen(sockfd: RawFd, backlog: c_int) -> Detour<i32> {
             blocking_send_hook_message(HookMessage::Tcp(TcpIncoming::Listen(Listen {
                 mirror_address: address,
                 requested_address,
+                faked_address,
                 id: socket.id,
             })))?;
 
             Arc::get_mut(&mut socket).unwrap().state = SocketState::Listening(Bound {
                 requested_address,
+                faked_address,
                 address,
             });
 
@@ -405,12 +421,15 @@ pub(super) fn connect(
                     let socket = entry.value();
                     if let SocketState::Listening(Bound {
                         requested_address,
+                        faked_address,
                         address,
                     }) = socket.state
                     {
                         if requested_address.port() == ip_address.port()
                             && socket.protocol == user_socket_info.protocol
                         {
+                            debug!("calling FN_CONNECT for address {address:#?} | faked_address {faked_address:#?}");
+
                             let rawish_remote_address = SockAddr::from(address);
                             let result = unsafe {
                                 FN_CONNECT(
@@ -529,7 +548,7 @@ pub(super) fn getpeername(
     fill_address(address, address_len, remote_address.try_into()?)
 }
 /// Resolve the fake local address to the real local address.
-#[tracing::instrument(level = "trace", skip(address, address_len))]
+#[tracing::instrument(level = "debug", skip(address, address_len))]
 pub(super) fn getsockname(
     sockfd: RawFd,
     address: *mut sockaddr,
@@ -539,19 +558,29 @@ pub(super) fn getsockname(
         SOCKETS
             .get(&sockfd)
             .bypass(Bypass::LocalFdNotFound(sockfd))
+            .inspect(|socket| debug!("socket {:#?}", socket.state))
             .and_then(|entry| match &entry.value().state {
                 SocketState::Connected(connected) => {
                     Detour::Success(connected.local_address.clone())
                 }
-                SocketState::Bound(bound) => Detour::Success(bound.requested_address.into()),
-                SocketState::Listening(bound) => Detour::Success(bound.requested_address.into()),
+                SocketState::Bound(bound) => Detour::Success(bound.faked_address.into()),
+                SocketState::Listening(bound) => Detour::Success(bound.faked_address.into()),
                 _ => Detour::Bypass(Bypass::InvalidState(sockfd)),
             })?
     };
 
     debug!("getsockname -> local_address {:#?}", local_address);
 
+    let s: SocketAddr = local_address.clone().try_into().unwrap();
+    if s.port() != 80 {
+        debug_stuff();
+    }
+
     fill_address(address, address_len, local_address.try_into()?)
+}
+
+fn debug_stuff() {
+    debug!("Not port 80!");
 }
 
 /// When the fd is "ours", we accept and recv the first bytes that contain metadata on the
@@ -569,6 +598,7 @@ pub(super) fn accept(
         SOCKETS
             .get(&sockfd)
             .bypass(Bypass::LocalFdNotFound(sockfd))
+            .inspect(|socket| debug!("socket.state {:#?}", socket.state))
             .and_then(|socket| match &socket.state {
                 SocketState::Listening(_) => {
                     Detour::Success((socket.id, socket.domain, socket.protocol, socket.type_))
@@ -595,7 +625,11 @@ pub(super) fn accept(
     });
     let new_socket = UserSocket::new(domain, type_, protocol, state, type_.try_into()?);
 
+    debug!("new_socket before fill_address {new_socket:#?}");
+
     fill_address(address, address_len, remote_address.try_into()?)?;
+
+    debug!("new_socket after fill_address {new_socket:#?}");
 
     SOCKETS.insert(new_fd, Arc::new(new_socket));
 

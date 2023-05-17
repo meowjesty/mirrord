@@ -966,7 +966,6 @@
 <a href="#966" id="966">966</a>
 <a href="#967" id="967">967</a>
 <a href="#968" id="968">968</a>
-<a href="#969" id="969">969</a>
 </pre><pre class="rust"><code><span class="attr">#![feature(c_variadic)]
 #![feature(once_cell)]
 #![feature(result_option_inspect)]
@@ -1066,7 +1065,6 @@
 };
 <span class="kw">use </span>mirrord_layer_macro::{hook_fn, hook_guard_fn};
 <span class="kw">use </span>mirrord_protocol::{
-    codec::LogLevel,
     dns::{DnsLookup, GetAddrInfoRequest},
     tcp::{HttpResponse, LayerTcpSteal},
     ClientMessage, DaemonMessage,
@@ -1201,6 +1199,10 @@
 ///
 /// When true, localhost connections will stay local - wont mirror or steal.
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">static </span>INCOMING_IGNORE_LOCALHOST: OnceLock&lt;bool&gt; = OnceLock::new();
+
+<span class="doccomment">/// Indicates this is a targetless run, so that users can be warned if their application is
+/// mirroring/stealing from a targetless agent.
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">static </span>TARGETLESS: OnceLock&lt;bool&gt; = OnceLock::new();
 
 <span class="doccomment">/// Ports to ignore on listening for mirroring/stealing.
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">static </span>INCOMING_IGNORE_PORTS: OnceLock&lt;HashSet&lt;u16&gt;&gt; = OnceLock::new();
@@ -1395,6 +1397,10 @@
     INCOMING_IGNORE_LOCALHOST
         .set(config.feature.network.incoming.ignore_localhost)
         .expect(<span class="string">&quot;Setting INCOMING_IGNORE_LOCALHOST singleton&quot;</span>);
+
+    TARGETLESS
+        .set(config.target.is_none())
+        .expect(<span class="string">&quot;Setting TARGETLESS singleton&quot;</span>);
 
     INCOMING_IGNORE_PORTS
         .set(config.feature.network.incoming.ignore_ports.clone())
@@ -1648,17 +1654,9 @@
                 </span>.send(get_addr_info.<span class="number">0</span>)
                 .map_err(|<span class="kw">_</span>| LayerError::SendErrorGetAddrInfoResponse),
             DaemonMessage::Close(error_message) =&gt; <span class="prelude-val">Err</span>(LayerError::AgentErrorClosed(error_message)),
-            DaemonMessage::LogMessage(log_message) =&gt; {
-                <span class="kw">match </span>log_message.level {
-                    LogLevel::Warn =&gt; {
-                        <span class="macro">warn!</span>(message = log_message.message, <span class="string">&quot;Daemon sent log message&quot;</span>)
-                    }
-                    LogLevel::Error =&gt; {
-                        <span class="macro">error!</span>(message = log_message.message, <span class="string">&quot;Daemon sent log message&quot;</span>)
-                    }
-                }
-
-                <span class="prelude-val">Ok</span>(())
+            DaemonMessage::LogMessage(<span class="kw">_</span>) =&gt; {
+                <span class="comment">// handled in protocol level `wrap_raw_connection`
+                </span><span class="prelude-val">Ok</span>(())
             }
         }
     }

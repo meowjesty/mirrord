@@ -146,7 +146,6 @@ mod tcp;
 mod tcp_mirror;
 mod tcp_steal;
 mod tracing_util;
-mod udp;
 
 #[cfg(target_os = "linux")]
 #[cfg(target_arch = "x86_64")]

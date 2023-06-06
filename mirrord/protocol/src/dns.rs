@@ -1,11 +1,11 @@
 extern crate alloc;
-use core::{fmt, ops::Deref};
+use core::ops::Deref;
 use std::net::IpAddr;
 
 use bincode::{Decode, Encode};
 use trust_dns_resolver::{lookup_ip::LookupIp, proto::rr::resource::RecordParts};
 
-use crate::{outgoing::SocketAddress, RemoteResult};
+use crate::RemoteResult;
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct LookupRecord {
@@ -74,19 +74,4 @@ impl Deref for GetAddrInfoResponse {
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct GetAddrInfoRequest {
     pub node: String,
-}
-
-#[derive(Encode, Decode, PartialEq, Eq, Clone)]
-pub struct RecvFromResponse {
-    pub bytes: Vec<u8>,
-    pub source_address: SocketAddress,
-}
-
-impl fmt::Debug for RecvFromResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RecvFromResponse")
-            .field("bytes (length)", &self.bytes.len())
-            .field("source_address", &self.source_address)
-            .finish()
-    }
 }

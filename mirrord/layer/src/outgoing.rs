@@ -1,13 +1,16 @@
 use core::fmt;
-use std::ops::{Deref, DerefMut};
+use std::{
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+};
 
 use mirrord_protocol::{
-    outgoing::{DaemonConnect, DaemonRead, LayerClose, LayerConnect, LayerWrite},
+    outgoing::{DaemonConnect, DaemonRead, LayerClose, LayerConnect, LayerWrite, SocketAddress},
     ConnectionId,
 };
 use socket2::SockAddr;
 
-use crate::common::ResponseChannel;
+use crate::{common::ResponseChannel, socket::id::SocketId};
 
 pub(crate) mod tcp;
 pub(crate) mod udp;
@@ -23,10 +26,50 @@ pub(crate) struct RemoteConnection {
     pub(crate) user_app_address: SockAddr,
 }
 
+pub(crate) struct RecvFromPacket {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) source_address: SocketAddress,
+}
+
+impl fmt::Debug for RecvFromPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReceivedPacket")
+            .field("source_address", &self.source_address)
+            .field("bytes (length)", &self.bytes.len())
+            .finish()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SendToResponse {
+    pub(crate) sent_amount: usize,
+}
+
 #[derive(Debug)]
 pub(crate) struct Connect {
     pub(crate) remote_address: SockAddr,
     pub(crate) channel_tx: ResponseChannel<RemoteConnection>,
+}
+
+#[derive(Debug)]
+pub(crate) struct RecvFrom {
+    pub(crate) socket_id: SocketId,
+    pub(crate) channel_tx: ResponseChannel<RecvFromPacket>,
+}
+
+pub(crate) struct SendTo {
+    pub(crate) destination: SocketAddr,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) channel_tx: ResponseChannel<SendToResponse>,
+}
+
+impl fmt::Debug for SendTo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SendTo")
+            .field("destination", &self.destination)
+            .field("bytes (length)", &self.bytes.len())
+            .finish()
+    }
 }
 
 pub(crate) struct Write {

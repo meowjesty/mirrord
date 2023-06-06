@@ -1,11 +1,13 @@
 use alloc::ffi::CString;
 use core::{cmp, ffi::CStr, mem, slice};
-use std::{os::unix::io::RawFd, sync::LazyLock};
+use std::{net::SocketAddr, os::unix::io::RawFd, sync::LazyLock};
 
 use dashmap::DashSet;
 use errno::{set_errno, Errno};
 use libc::{c_char, c_int, c_void, size_t, sockaddr, socklen_t, ssize_t, EINVAL};
 use mirrord_layer_macro::{hook_fn, hook_guard_fn};
+use socket2::SockAddr;
+use tracing::debug;
 
 use super::ops::*;
 use crate::{detour::DetourGuard, hooks::HookManager, replace};
@@ -320,16 +322,30 @@ unsafe extern "C" fn recv_from_detour(
     if raw_source.is_null() {
         libc::recv(sockfd, out_buffer, buffer_length, flags)
     } else {
-        recv_from(sockfd, flags, raw_source, source_length).unwrap_or_bypass_with(|_| {
-            FN_RECV_FROM(
-                sockfd,
-                out_buffer,
-                buffer_length,
-                flags,
-                raw_source,
-                source_length,
-            )
-        })
+        recv_from(sockfd, flags, raw_source, source_length)
+            .map(|bytes| todo!())
+            .unwrap_or_bypass_with(|_| {
+                let result = FN_RECV_FROM(
+                    sockfd,
+                    out_buffer,
+                    buffer_length,
+                    flags,
+                    raw_source,
+                    source_length,
+                );
+
+                let (_, source) = SockAddr::try_init(|storage, len| {
+                    if FN_GETSOCKNAME(sockfd, storage.cast(), len) == -1 {
+                        todo!()
+                    } else {
+                        Ok(())
+                    }
+                })
+                .unwrap();
+                debug!("source {:#?}", source.as_socket());
+
+                result
+            })
     }
     // TODO(alex) [high] 2023-06-05: If `raw_source` is NOT null, and the socket is NOT connection
     // oriented, then we have to fill it with the address of the remote. Be careful here, as we have
@@ -340,7 +356,7 @@ unsafe extern "C" fn recv_from_detour(
 }
 
 #[hook_guard_fn]
-unsafe extern "C" fn send_to_detour(
+pub(crate) unsafe extern "C" fn send_to_detour(
     sockfd: RawFd,
     raw_message: *const c_void,
     message_length: size_t,
@@ -348,11 +364,29 @@ unsafe extern "C" fn send_to_detour(
     raw_destination: *const sockaddr,
     destination_length: socklen_t,
 ) -> ssize_t {
-    let message = (!raw_message.is_null())
-        .then(|| slice::from_raw_parts(raw_message as *const _, message_length).to_vec());
+    // let message = (!raw_message.is_null())
+    //     .then(|| slice::from_raw_parts(raw_message as *const _, message_length).to_vec());
 
-    send_to(sockfd, message, flags, raw_destination, destination_length);
-    todo!()
+    // debug!("message {message:?}");
+
+    send_to(
+        sockfd,
+        raw_message,
+        message_length,
+        flags,
+        raw_destination,
+        destination_length,
+    )
+    .unwrap_or_bypass_with(|_| {
+        FN_SEND_TO(
+            sockfd,
+            raw_message,
+            message_length,
+            flags,
+            raw_destination,
+            destination_length,
+        )
+    })
 }
 
 pub(crate) unsafe fn enable_socket_hooks(hook_manager: &mut HookManager, enabled_remote_dns: bool) {

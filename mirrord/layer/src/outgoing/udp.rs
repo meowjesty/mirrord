@@ -32,6 +32,8 @@ use crate::{common::ResponseDeque, detour::DetourGuard, error::LayerError};
 #[derive(Debug)]
 pub(crate) enum UdpOutgoing {
     Connect(Connect),
+    RecvFrom(RecvFrom),
+    SendTo(SendTo),
 }
 
 /// Responsible for handling hook and daemon messages for the outgoing traffic feature.
@@ -248,6 +250,24 @@ impl UdpOutgoingHandler {
                     )))
                     .await?)
             }
+            UdpOutgoing::RecvFrom(RecvFrom {
+                socket_id,
+                channel_tx,
+            }) => {
+                trace!("RecvFrom ->");
+                todo!()
+
+                // Ok(tx
+                //     .send(ClientMessage::UdpOutgoing(LayerUdpOutgoing::RecvFrom(
+                //         LayerRecvFrom {},
+                //     )))
+                //     .await?)
+            }
+            UdpOutgoing::SendTo(SendTo {
+                destination,
+                bytes,
+                channel_tx,
+            }) => todo!(),
         }
     }
 

@@ -9,9 +9,9 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use libc::{c_int, sockaddr, socklen_t};
+use libc::{c_int, c_void, sockaddr, socklen_t};
 use mirrord_protocol::{
-    dns::{LookupRecord, RecvFromResponse},
+    dns::LookupRecord,
     file::{OpenFileResponse, OpenOptionsInternal, ReadFileResponse},
 };
 use socket2::SockAddr;
@@ -26,9 +26,11 @@ use crate::{
     error::HookError,
     file::{self, OPEN_FILES},
     is_debugger_port,
-    outgoing::{tcp::TcpOutgoing, udp::UdpOutgoing, Connect, RemoteConnection},
+    outgoing::{
+        tcp::TcpOutgoing, udp::UdpOutgoing, Connect, RecvFrom, RecvFromPacket, RemoteConnection,
+        SendTo,
+    },
     tcp::{Listen, TcpIncoming},
-    udp::{RecvFrom, UdpIncoming},
     ENABLED_TCP_OUTGOING, ENABLED_UDP_OUTGOING, INCOMING_IGNORE_LOCALHOST,
     OUTGOING_IGNORE_LOCALHOST, REMOTE_UNIX_STREAMS, TARGETLESS,
 };
@@ -80,7 +82,7 @@ impl From<ConnectResult> for i32 {
 }
 
 /// Create the socket, add it to SOCKETS if successful and matching protocol and domain (Tcpv4/v6)
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug", ret)]
 pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Detour<RawFd> {
     let socket_kind = type_.try_into()?;
 
@@ -111,7 +113,7 @@ pub(super) fn socket(domain: c_int, type_: c_int, protocol: c_int) -> Detour<Raw
 
 /// Check if the socket is managed by us, if it's managed by us and it's not an ignored port,
 /// update the socket state.
-#[tracing::instrument(level = "trace", skip(raw_address))]
+#[tracing::instrument(level = "debug", ret, skip(raw_address))]
 pub(super) fn bind(
     sockfd: c_int,
     raw_address: *const sockaddr,
@@ -142,6 +144,12 @@ pub(super) fn bind(
         return Detour::Bypass(Bypass::IgnoreLocalhost(requested_port));
     }
 
+    // TODO(alex) [high] 2023-06-06: DNS resolution tries to bind on port `0`, thus we ignore the
+    // bind and drop our socket.
+    //
+    // We could check if this `socket` is `UDP`, and if it is + it's trying to bind on port 0, then
+    // we change the port to some random, free, value (not in `SOCKETS`), and proceed, thus not
+    // completely removing the port 0 ignore behavior.
     if is_ignored_port(&requested_address)
         || is_debugger_port(&requested_address)
         || INCOMING_IGNORE_PORTS
@@ -768,17 +776,18 @@ pub(super) fn gethostname() -> Detour<&'static CString> {
 
 /// libraries like `c-ares` expect messages to be from the address they were sent to.
 /// currently this function just fills in the address expected by the caller.
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "debug", ret, fields(source))]
 pub(super) fn recv_from(
     sockfd: i32,
     flags: i32,
     sockaddr: *mut sockaddr,
     addrlen: *mut u32,
 ) -> Detour<Vec<u8>> {
-    SOCKETS.contains_key(&sockfd).then_some(())?;
+    let socket_id = SOCKETS.get(&sockfd).map(|socket| socket.id)?;
 
     let (mirror_tx, mirror_rx) = oneshot::channel();
-    let recv_from_hook = UdpIncoming::RecvFrom(RecvFrom {
+    let recv_from_hook = UdpOutgoing::RecvFrom(RecvFrom {
+        socket_id,
         channel_tx: mirror_tx,
     });
 
@@ -792,28 +801,92 @@ pub(super) fn recv_from(
     // socket creation process to `socket` itself?
     //
     // Can we use the interceptor strategy here?
-    let hook_message = HookMessage::UdpIncoming(recv_from_hook);
-    blocking_send_hook_message(hook_message)?;
+    //
+    // ADD(alex) [high] 2023-06-06: The flow is:
+    //
+    // 1. `send_to` to internet provider, which is `A:53`;
+    // 2. `recv_from` receives bytes from `A:53`;
+    // 3. `recv_from` receives bytes from `A:53`;
+    //
+    // This means that DNS resolution with `send_to` and `recv_from` is basically a
+    // `connect` -> `send` -> `recv`, as we're always interacting with the same IP.
+    let hook_message = HookMessage::UdpOutgoing(recv_from_hook);
+    // blocking_send_hook_message(hook_message)?;
 
-    let RecvFromResponse {
+    let RecvFromPacket {
         bytes,
         source_address,
     } = mirror_rx.blocking_recv()??;
 
     fill_address(sockaddr, addrlen, source_address.try_into()?)?;
 
-    Detour::Success(bytes)
+    Detour::Bypass(Bypass::CStrConversion)
 }
 
-#[tracing::instrument(level = "debug", skip(message, raw_destination, destination_length))]
+#[tracing::instrument(
+    level = "debug",
+    ret,
+    skip(raw_message, raw_destination, destination_length)
+)]
 pub(super) fn send_to(
     sockfd: RawFd,
-    message: Option<Vec<u8>>,
+    // message: Option<Vec<u8>>,
+    raw_message: *const c_void,
+    message_length: usize,
     flags: i32,
     raw_destination: *const sockaddr,
     destination_length: socklen_t,
 ) -> Detour<isize> {
-    let destination = SocketAddr::try_from_raw(raw_destination, destination_length)?;
+    // let bytes = message?;
+    let destination = SockAddr::try_from_raw(raw_destination, destination_length)?;
+    debug!("destination {destination:#?}");
 
-    todo!()
+    SOCKETS
+        .iter()
+        .for_each(|s| debug!("socket {:#?}", s.value()));
+    // TODO(alex) [high] 2023-06-06: The socket is bound before `send_to` is called.
+    let socket_id = SOCKETS.get(&sockfd).map(|socket| socket.id)?;
+    debug!("socket id {socket_id:#?}");
+
+    let (mirror_tx, mirror_rx) = oneshot::channel();
+    let connect = Connect {
+        remote_address: destination.into(),
+        channel_tx: mirror_tx,
+    };
+
+    let connect_hook = UdpOutgoing::Connect(connect);
+    let hook_message = HookMessage::UdpOutgoing(connect_hook);
+    blocking_send_hook_message(hook_message)?;
+
+    let RemoteConnection {
+        layer_address,
+        user_app_address,
+    } = mirror_rx.blocking_recv()??;
+
+    let raw_interceptor_address = layer_address.as_ptr();
+    let raw_interceptor_length = layer_address.len();
+
+    let sent = unsafe {
+        FN_SEND_TO(
+            sockfd,
+            raw_message,
+            message_length,
+            flags,
+            raw_interceptor_address,
+            raw_interceptor_length,
+        )
+    };
+
+    // TODO(alex) [high] 2023-06-06: Could have a "Fake connect" state for this socket, so we can
+    // keep the `destination` for both `recv_from`, and for further `send_to` calls.
+
+    // let send_to_hook = UdpOutgoing::SendTo(SendTo {
+    //     destination,
+    //     bytes,
+    //     channel_tx: mirror_tx,
+    // });
+
+    // TODO(alex) [high] 2023-06-06: DNS resolution starts from here.
+
+    Detour::Success(sent)
 }

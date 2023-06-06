@@ -15,7 +15,6 @@ use crate::{
     file::{FileOperation, OpenOptionsInternalExt},
     outgoing::{tcp::TcpOutgoing, udp::UdpOutgoing},
     tcp::TcpIncoming,
-    udp::UdpIncoming,
     HOOK_SENDER,
 };
 
@@ -77,9 +76,6 @@ pub(crate) enum HookMessage {
 
     /// TCP outgoing messages originating from a hook, see [`TcpOutgoing`].
     TcpOutgoing(TcpOutgoing),
-
-    /// UDP incoming messages originating from a hook, see [`UdpIncoming`].
-    UdpIncoming(UdpIncoming),
 
     /// UDP outgoing messages originating from a hook, see [`UdpOutgoing`].
     UdpOutgoing(UdpOutgoing),

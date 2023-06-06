@@ -145,6 +145,20 @@ impl UdpOutgoingApi {
         let mut readers: StreamMap<ConnectionId, SplitStream<UdpFramed<BytesCodec>>> =
             StreamMap::default();
 
+        // TODO(alex) [high] 2023-06-06: To interact nicely with 2 sockets calling `recv_from`, we
+        // can do the following:
+        //
+        // 1. The first `recv_from` call creates the socket (from layer);
+        // 2. Here we use this socket to do 1 `recv_from`;
+        // 3. When the socket receives a packet, we connect to the `from_addr`;
+        // 4. Now this socket is exclusive to this connection;
+        //
+        // Not sure this works, the user will keep calling `recv_from`. We probably won't ever hit a
+        // need for 2 sockets, as this is UDP, so just create 1 socket here for `recv_from`,
+        // associate it with the layer socket, then keep calling `socket.recv_from` and writing the
+        // results to an interceptor socket on the layer, that keeps sending data to the user socket
+        // with `send_to`.
+
         loop {
             select! {
                 biased;

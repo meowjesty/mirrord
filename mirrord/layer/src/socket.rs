@@ -257,7 +257,9 @@ impl ProtocolExt for Protocol {
     }
 }
 
+/// Trait that expands `std` and `socket2` sockets.
 pub(crate) trait SocketAddrExt {
+    /// Converts a raw [`sockaddr`] pointer into a more _Rusty_ type.
     fn try_from_raw(raw_address: *const sockaddr, address_length: socklen_t) -> Detour<Self>
     where
         Self: Sized;

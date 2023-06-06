@@ -1,5 +1,5 @@
 use alloc::ffi::CString;
-use core::{cmp, ffi::CStr, mem};
+use core::{cmp, ffi::CStr, mem, slice};
 use std::{os::unix::io::RawFd, sync::LazyLock};
 
 use dashmap::DashSet;
@@ -305,26 +305,59 @@ unsafe extern "C" fn freeaddrinfo_detour(addrinfo: *mut libc::addrinfo) {
 /// Hook for [`libc::recvfrom`].
 /// This hook currently just helps some udp flows to go through by filling in
 /// original address for the caller.
+//
+// TODO(alex) [low] 2023-06-05: The docs state that if `message.length > buffer_length`, the bytes
+// may be discarded, it depends on the the type of socket (check `socket` C function).
 #[hook_guard_fn]
 unsafe extern "C" fn recv_from_detour(
     sockfd: i32,
-    buf: *mut c_void,
-    len: size_t,
+    out_buffer: *mut c_void,
+    buffer_length: size_t,
     flags: c_int,
-    src_addr: *mut sockaddr,
-    addrlen: *mut socklen_t,
+    raw_source: *mut sockaddr,
+    source_length: *mut socklen_t,
 ) -> ssize_t {
-    let recv_from_result = FN_RECV_FROM(sockfd, buf, len, flags, src_addr, addrlen);
-    if recv_from_result == -1 {
-        recv_from_result
+    if raw_source.is_null() {
+        libc::recv(sockfd, out_buffer, buffer_length, flags)
     } else {
-        recv_from(sockfd, src_addr, addrlen);
-        recv_from_result
+        recv_from(sockfd, flags, raw_source, source_length).unwrap_or_bypass_with(|_| {
+            FN_RECV_FROM(
+                sockfd,
+                out_buffer,
+                buffer_length,
+                flags,
+                raw_source,
+                source_length,
+            )
+        })
     }
+    // TODO(alex) [high] 2023-06-05: If `raw_source` is NOT null, and the socket is NOT connection
+    // oriented, then we have to fill it with the address of the remote. Be careful here, as we have
+    // to fill with the appropriate, actual, remote address, and NOT our interceptor socket address.
+    //
+    // If `raw_source` is null, then this is the same as `recv` (which we don't hook /sad, so we
+    // should just bypass?).
+}
+
+#[hook_guard_fn]
+unsafe extern "C" fn send_to_detour(
+    sockfd: RawFd,
+    raw_message: *const c_void,
+    message_length: size_t,
+    flags: c_int,
+    raw_destination: *const sockaddr,
+    destination_length: socklen_t,
+) -> ssize_t {
+    let message = (!raw_message.is_null())
+        .then(|| slice::from_raw_parts(raw_message as *const _, message_length).to_vec());
+
+    send_to(sockfd, message, flags, raw_destination, destination_length);
+    todo!()
 }
 
 pub(crate) unsafe fn enable_socket_hooks(hook_manager: &mut HookManager, enabled_remote_dns: bool) {
     replace!(hook_manager, "socket", socket_detour, FnSocket, FN_SOCKET);
+
     replace!(
         hook_manager,
         "recvfrom",
@@ -332,6 +365,14 @@ pub(crate) unsafe fn enable_socket_hooks(hook_manager: &mut HookManager, enabled
         FnRecv_from,
         FN_RECV_FROM
     );
+    replace!(
+        hook_manager,
+        "sendto",
+        send_to_detour,
+        FnSend_to,
+        FN_SEND_TO
+    );
+
     replace!(hook_manager, "bind", bind_detour, FnBind, FN_BIND);
     replace!(hook_manager, "listen", listen_detour, FnListen, FN_LISTEN);
 

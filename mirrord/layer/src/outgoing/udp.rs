@@ -208,6 +208,21 @@ impl UdpOutgoingHandler {
         tx: &Sender<ClientMessage>,
     ) -> Result<(), LayerError> {
         match message {
+            // TODO(alex) [high] 2023-06-05: Add a message here `RecvFrom` which is similar to
+            // `Connect`, but doesn't have a `remote_address`, as we're not connecting to any
+            // address.
+            //
+            // This will create a socket in the agent, that keeps calling `recv_from`?
+            //
+            // Nope, it should only call it when the user calls.
+            //
+            // Maybe we have 2 different messages here that spawn from `RecvFrom`:
+            //
+            // 1. creates a new socket and calls recv_from;
+            // 2. just calls `recv_from`;
+            //
+            // We have to associate the user's `sockfd` with an id in the agent, basically have
+            // a mirrored connection that we handle ourselves.
             UdpOutgoing::Connect(Connect {
                 remote_address,
                 channel_tx,

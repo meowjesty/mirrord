@@ -75,8 +75,6 @@ pub struct FeatureConfig {
     #[config(nested, toggleable)]
     pub env: EnvConfig,
 
-    // TODO(alex) [high] 2023-05-18: This links to `FsConfig`, not `FsUserConfig` as I thought
-    // before.
     /// ## feature.fs {#feature-fs}
     #[config(nested, toggleable)]
     pub fs: FsConfig,

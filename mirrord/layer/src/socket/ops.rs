@@ -11,7 +11,7 @@ use std::{
 
 use libc::{c_int, sockaddr, socklen_t};
 use mirrord_protocol::{
-    dns::LookupRecord,
+    dns::{LookupRecord, RecvFromResponse},
     file::{OpenFileResponse, OpenOptionsInternal, ReadFileResponse},
 };
 use socket2::SockAddr;
@@ -28,6 +28,7 @@ use crate::{
     is_debugger_port,
     outgoing::{tcp::TcpOutgoing, udp::UdpOutgoing, Connect, RemoteConnection},
     tcp::{Listen, TcpIncoming},
+    udp::{RecvFrom, UdpIncoming},
     ENABLED_TCP_OUTGOING, ENABLED_UDP_OUTGOING, INCOMING_IGNORE_LOCALHOST,
     OUTGOING_IGNORE_LOCALHOST, REMOTE_UNIX_STREAMS, TARGETLESS,
 };
@@ -768,10 +769,51 @@ pub(super) fn gethostname() -> Detour<&'static CString> {
 /// libraries like `c-ares` expect messages to be from the address they were sent to.
 /// currently this function just fills in the address expected by the caller.
 #[tracing::instrument(level = "trace")]
-pub(super) fn recv_from(sockfd: i32, sockaddr: *mut sockaddr, addrlen: *mut u32) -> Detour<()> {
-    let socket_state = SOCKETS.get(&sockfd)?.clone();
-    if let SocketState::Connected(Connected { remote_address, .. }) = &socket_state.state {
-        fill_address(sockaddr, addrlen, (remote_address.clone()).try_into()?)?;
-    }
-    Detour::Success(())
+pub(super) fn recv_from(
+    sockfd: i32,
+    flags: i32,
+    sockaddr: *mut sockaddr,
+    addrlen: *mut u32,
+) -> Detour<Vec<u8>> {
+    SOCKETS.contains_key(&sockfd).then_some(())?;
+
+    let (mirror_tx, mirror_rx) = oneshot::channel();
+    let recv_from_hook = UdpIncoming::RecvFrom(RecvFrom {
+        channel_tx: mirror_tx,
+    });
+
+    // TODO(alex) [high] 2023-06-05: We need a socket on the agent that is kept alive, as multiple
+    // `recv_from` will be called on the same socket.
+    //
+    // This means that we should receive an id here, and associate this `sockfd` with the agent
+    // socket id.
+    //
+    // The agent will create the socket on the first `recv_from` call? Or is it time to move this
+    // socket creation process to `socket` itself?
+    //
+    // Can we use the interceptor strategy here?
+    let hook_message = HookMessage::UdpIncoming(recv_from_hook);
+    blocking_send_hook_message(hook_message)?;
+
+    let RecvFromResponse {
+        bytes,
+        source_address,
+    } = mirror_rx.blocking_recv()??;
+
+    fill_address(sockaddr, addrlen, source_address.try_into()?)?;
+
+    Detour::Success(bytes)
+}
+
+#[tracing::instrument(level = "debug", skip(message, raw_destination, destination_length))]
+pub(super) fn send_to(
+    sockfd: RawFd,
+    message: Option<Vec<u8>>,
+    flags: i32,
+    raw_destination: *const sockaddr,
+    destination_length: socklen_t,
+) -> Detour<isize> {
+    let destination = SocketAddr::try_from_raw(raw_destination, destination_length)?;
+
+    todo!()
 }

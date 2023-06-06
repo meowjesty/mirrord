@@ -9,7 +9,6 @@ use crate::{
     util::{MirrordToggleableConfig, VecOrSingle},
 };
 
-// TODO(alex) [high] 2023-05-18: Wrong example (incomplete) here and in the oficial docs.
 /// Filter configuration for the HTTP traffic stealer feature.
 ///
 /// Allows the user to set a filter (regex) for the HTTP headers, so that the stealer traffic

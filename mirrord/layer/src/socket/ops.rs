@@ -150,7 +150,7 @@ pub(super) fn bind(
     // We could check if this `socket` is `UDP`, and if it is + it's trying to bind on port 0, then
     // we change the port to some random, free, value (not in `SOCKETS`), and proceed, thus not
     // completely removing the port 0 ignore behavior.
-    if is_ignored_port(&requested_address)
+    if (is_ignored_port(&requested_address) && matches!(socket.kind, SocketKind::Tcp(_)))
         || is_debugger_port(&requested_address)
         || INCOMING_IGNORE_PORTS
             .get()
@@ -294,7 +294,7 @@ const UDP: ConnectType = !TCP;
 /// This returns errno so we can restore the correct errno in case result is -1 (until we get
 /// back to the hook we might call functions that will corrupt errno)
 #[tracing::instrument(level = "trace")]
-fn connect_outgoing<const TYPE: ConnectType>(
+fn connect_outgoing<const TYPE: ConnectType, const CALL_CONNECT: bool>(
     sockfd: RawFd,
     remote_address: SockAddr,
     mut user_socket_info: Arc<UserSocket>,
@@ -325,8 +325,14 @@ fn connect_outgoing<const TYPE: ConnectType>(
     } = mirror_rx.blocking_recv()??;
 
     // Connect to the interceptor socket that is listening.
-    let connect_result: ConnectResult =
-        unsafe { FN_CONNECT(sockfd, layer_address.as_ptr(), layer_address.len()) }.into();
+    let connect_result: ConnectResult = if CALL_CONNECT {
+        unsafe { FN_CONNECT(sockfd, layer_address.as_ptr(), layer_address.len()) }.into()
+    } else {
+        ConnectResult {
+            result: 0,
+            error: None,
+        }
+    };
 
     if connect_result.is_failure() {
         error!(
@@ -458,7 +464,7 @@ pub(super) fn connect(
 
     match user_socket_info.kind {
         SocketKind::Udp(_) if enabled_udp_outgoing => {
-            connect_outgoing::<UDP>(sockfd, remote_address, user_socket_info)
+            connect_outgoing::<UDP, true>(sockfd, remote_address, user_socket_info)
         }
         SocketKind::Tcp(_) => match user_socket_info.state {
             SocketState::Initialized
@@ -468,7 +474,7 @@ pub(super) fn connect(
                             .as_ref()
                             .is_some_and(|streams| !streams.is_empty())) =>
             {
-                connect_outgoing::<TCP>(sockfd, remote_address, user_socket_info)
+                connect_outgoing::<TCP, true>(sockfd, remote_address, user_socket_info)
             }
             SocketState::Bound(Bound { address, .. }) => {
                 trace!("connect -> SocketState::Bound {:#?}", user_socket_info);
@@ -785,12 +791,6 @@ pub(super) fn recv_from(
 ) -> Detour<Vec<u8>> {
     let socket_id = SOCKETS.get(&sockfd).map(|socket| socket.id)?;
 
-    let (mirror_tx, mirror_rx) = oneshot::channel();
-    let recv_from_hook = UdpOutgoing::RecvFrom(RecvFrom {
-        socket_id,
-        channel_tx: mirror_tx,
-    });
-
     // TODO(alex) [high] 2023-06-05: We need a socket on the agent that is kept alive, as multiple
     // `recv_from` will be called on the same socket.
     //
@@ -810,15 +810,8 @@ pub(super) fn recv_from(
     //
     // This means that DNS resolution with `send_to` and `recv_from` is basically a
     // `connect` -> `send` -> `recv`, as we're always interacting with the same IP.
-    let hook_message = HookMessage::UdpOutgoing(recv_from_hook);
-    // blocking_send_hook_message(hook_message)?;
 
-    let RecvFromPacket {
-        bytes,
-        source_address,
-    } = mirror_rx.blocking_recv()??;
-
-    fill_address(sockaddr, addrlen, source_address.try_into()?)?;
+    // fill_address(sockaddr, addrlen, source_address.try_into()?)?;
 
     Detour::Bypass(Bypass::CStrConversion)
 }
@@ -841,13 +834,13 @@ pub(super) fn send_to(
     let destination = SockAddr::try_from_raw(raw_destination, destination_length)?;
     debug!("destination {destination:#?}");
 
-    SOCKETS
-        .iter()
-        .for_each(|s| debug!("socket {:#?}", s.value()));
-    // TODO(alex) [high] 2023-06-06: The socket is bound before `send_to` is called.
-    let socket_id = SOCKETS.get(&sockfd).map(|socket| socket.id)?;
-    debug!("socket id {socket_id:#?}");
+    // TODO(alex) [high] 2023-06-07: Modify the socket to have our `fill_address` for later.
+    let (_, user_socket_info) = SOCKETS
+        .remove(&sockfd)
+        .ok_or(Bypass::LocalFdNotFound(sockfd))?;
 
+
+    connect_outgoing(sockfd, destination, )
     let (mirror_tx, mirror_rx) = oneshot::channel();
     let connect = Connect {
         remote_address: destination.into(),

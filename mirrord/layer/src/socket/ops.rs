@@ -9,7 +9,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use libc::{c_int, c_void, sockaddr, socklen_t};
+use libc::{c_int, c_void, size_t, sockaddr, socklen_t};
 use mirrord_protocol::{
     dns::LookupRecord,
     file::{OpenFileResponse, OpenOptionsInternal, ReadFileResponse},
@@ -345,6 +345,7 @@ fn connect_outgoing<const TYPE: ConnectType, const CALL_CONNECT: bool>(
     let connected = Connected {
         remote_address: remote_address.try_into()?,
         local_address: user_app_address.try_into()?,
+        layer_address: Some(layer_address.try_into()?),
     };
 
     Arc::get_mut(&mut user_socket_info).unwrap().state = SocketState::Connected(connected);
@@ -587,6 +588,7 @@ pub(super) fn accept(
     let state = SocketState::Connected(Connected {
         remote_address: remote_address.clone(),
         local_address,
+        layer_address: None,
     });
     let new_socket = UserSocket::new(domain, type_, protocol, state, type_.try_into()?);
 
@@ -785,11 +787,19 @@ pub(super) fn gethostname() -> Detour<&'static CString> {
 #[tracing::instrument(level = "debug", ret, fields(source))]
 pub(super) fn recv_from(
     sockfd: i32,
+    out_buffer: *mut c_void,
+    buffer_length: size_t,
     flags: i32,
     sockaddr: *mut sockaddr,
     addrlen: *mut u32,
-) -> Detour<Vec<u8>> {
-    let socket_id = SOCKETS.get(&sockfd).map(|socket| socket.id)?;
+) -> Detour<isize> {
+    let address = SOCKETS
+        .get(&sockfd)
+        .map(|socket| match &socket.state {
+            SocketState::Connected(connected) => connected.remote_address.clone(),
+            _ => unreachable!(),
+        })
+        .map(SocketAddress::try_into)??;
 
     // TODO(alex) [high] 2023-06-05: We need a socket on the agent that is kept alive, as multiple
     // `recv_from` will be called on the same socket.
@@ -811,16 +821,19 @@ pub(super) fn recv_from(
     // This means that DNS resolution with `send_to` and `recv_from` is basically a
     // `connect` -> `send` -> `recv`, as we're always interacting with the same IP.
 
-    // fill_address(sockaddr, addrlen, source_address.try_into()?)?;
+    let recv_from_result =
+        unsafe { FN_RECV_FROM(sockfd, out_buffer, buffer_length, flags, sockaddr, addrlen) };
 
-    Detour::Bypass(Bypass::CStrConversion)
+    fill_address(sockaddr, addrlen, address)?;
+
+    Detour::Success(recv_from_result)
 }
 
-#[tracing::instrument(
-    level = "debug",
-    ret,
-    skip(raw_message, raw_destination, destination_length)
-)]
+// #[tracing::instrument(
+//     level = "debug",
+//     ret,
+//     skip(raw_message, raw_destination, destination_length)
+// )]
 pub(super) fn send_to(
     sockfd: RawFd,
     // message: Option<Vec<u8>>,
@@ -839,22 +852,15 @@ pub(super) fn send_to(
         .remove(&sockfd)
         .ok_or(Bypass::LocalFdNotFound(sockfd))?;
 
+    connect_outgoing::<UDP, false>(sockfd, destination, user_socket_info)?;
 
-    connect_outgoing(sockfd, destination, )
-    let (mirror_tx, mirror_rx) = oneshot::channel();
-    let connect = Connect {
-        remote_address: destination.into(),
-        channel_tx: mirror_tx,
-    };
-
-    let connect_hook = UdpOutgoing::Connect(connect);
-    let hook_message = HookMessage::UdpOutgoing(connect_hook);
-    blocking_send_hook_message(hook_message)?;
-
-    let RemoteConnection {
-        layer_address,
-        user_app_address,
-    } = mirror_rx.blocking_recv()??;
+    let layer_address: SockAddr = SOCKETS
+        .get(&sockfd)
+        .and_then(|socket| match &socket.state {
+            SocketState::Connected(connected) => connected.layer_address.clone(),
+            _ => unreachable!(),
+        })
+        .map(SocketAddress::try_into)??;
 
     let raw_interceptor_address = layer_address.as_ptr();
     let raw_interceptor_length = layer_address.len();

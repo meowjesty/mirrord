@@ -311,7 +311,7 @@ unsafe extern "C" fn freeaddrinfo_detour(addrinfo: *mut libc::addrinfo) {
 // TODO(alex) [low] 2023-06-05: The docs state that if `message.length > buffer_length`, the bytes
 // may be discarded, it depends on the the type of socket (check `socket` C function).
 #[hook_guard_fn]
-unsafe extern "C" fn recv_from_detour(
+pub(super) unsafe extern "C" fn recv_from_detour(
     sockfd: i32,
     out_buffer: *mut c_void,
     buffer_length: size_t,
@@ -322,30 +322,37 @@ unsafe extern "C" fn recv_from_detour(
     if raw_source.is_null() {
         libc::recv(sockfd, out_buffer, buffer_length, flags)
     } else {
-        recv_from(sockfd, flags, raw_source, source_length)
-            .map(|bytes| todo!())
-            .unwrap_or_bypass_with(|_| {
-                let result = FN_RECV_FROM(
-                    sockfd,
-                    out_buffer,
-                    buffer_length,
-                    flags,
-                    raw_source,
-                    source_length,
-                );
+        recv_from(
+            sockfd,
+            out_buffer,
+            buffer_length,
+            flags,
+            raw_source,
+            source_length,
+        )
+        // .map(|bytes| todo!())
+        .unwrap_or_bypass_with(|_| {
+            let result = FN_RECV_FROM(
+                sockfd,
+                out_buffer,
+                buffer_length,
+                flags,
+                raw_source,
+                source_length,
+            );
 
-                let (_, source) = SockAddr::try_init(|storage, len| {
-                    if FN_GETSOCKNAME(sockfd, storage.cast(), len) == -1 {
-                        todo!()
-                    } else {
-                        Ok(())
-                    }
-                })
-                .unwrap();
-                debug!("source {:#?}", source.as_socket());
-
-                result
+            let (_, source) = SockAddr::try_init(|storage, len| {
+                if FN_GETSOCKNAME(sockfd, storage.cast(), len) == -1 {
+                    todo!()
+                } else {
+                    Ok(())
+                }
             })
+            .unwrap();
+            debug!("source {:#?}", source.as_socket());
+
+            result
+        })
     }
     // TODO(alex) [high] 2023-06-05: If `raw_source` is NOT null, and the socket is NOT connection
     // oriented, then we have to fill it with the address of the remote. Be careful here, as we have
@@ -356,7 +363,7 @@ unsafe extern "C" fn recv_from_detour(
 }
 
 #[hook_guard_fn]
-pub(crate) unsafe extern "C" fn send_to_detour(
+pub(super) unsafe extern "C" fn send_to_detour(
     sockfd: RawFd,
     raw_message: *const c_void,
     message_length: size_t,

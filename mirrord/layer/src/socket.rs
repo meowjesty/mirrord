@@ -112,6 +112,9 @@ pub struct Connected {
     /// We would set this ip as `1.2.3.4:{port}` in [`bind`], where `{port}` is the user requested
     /// port.
     local_address: SocketAddress,
+
+    /// The address of the interceptor socket (this is what we're really connected to).
+    layer_address: Option<SocketAddress>,
 }
 
 /// Represents a [`SocketState`] where the user made a [`libc::bind`] call, and we intercepted it.

@@ -1,7 +1,7 @@
 //! We implement each hook function in a safe function as much as possible, having the unsafe do the
 //! absolute minimum
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::unix::io::RawFd,
     sync::{Arc, LazyLock},
@@ -96,7 +96,7 @@ impl SocketInformation {
 #[derive(Debug)]
 pub struct Connected {
     /// Remote address we're (supposedly) connected to.
-    remote_address: SocketAddress,
+    remote_addresses: HashMap<SocketAddress, Option<SocketAddress>>,
 
     /// Local address (pod-wise)
     ///
@@ -112,9 +112,8 @@ pub struct Connected {
     /// We would set this ip as `1.2.3.4:{port}` in [`bind`], where `{port}` is the user requested
     /// port.
     local_address: SocketAddress,
-
-    /// The address of the interceptor socket (this is what we're really connected to).
-    layer_address: Option<SocketAddress>,
+    // The address of the interceptor socket (this is what we're really connected to).
+    // layer_addresses: HashSet<SocketAddress>,
 }
 
 /// Represents a [`SocketState`] where the user made a [`libc::bind`] call, and we intercepted it.

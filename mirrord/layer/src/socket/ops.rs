@@ -285,7 +285,7 @@ const UDP: ConnectType = !TCP;
 /// interception procedure.
 /// This returns errno so we can restore the correct errno in case result is -1 (until we get
 /// back to the hook we might call functions that will corrupt errno)
-#[tracing::instrument(level = "trace", ret)]
+// #[tracing::instrument(level = "trace", ret)]
 fn connect_outgoing<const TYPE: ConnectType, const CALL_CONNECT: bool>(
     sockfd: RawFd,
     remote_address: SockAddr,
@@ -334,10 +334,25 @@ fn connect_outgoing<const TYPE: ConnectType, const CALL_CONNECT: bool>(
         return Err(io::Error::last_os_error())?;
     }
 
-    let connected = Connected {
-        remote_address: remote_address.try_into()?,
-        local_address: user_app_address.try_into()?,
-        layer_address: Some(layer_address.try_into()?),
+    let connected = match &user_socket_info.state {
+        SocketState::Connected(connected) => {
+            let mut remote_addresses = connected.remote_addresses.clone();
+
+            remote_addresses.insert(remote_address.try_into()?, Some(layer_address.try_into()?));
+            Connected {
+                remote_addresses,
+                local_address: connected.local_address.clone(),
+            }
+        }
+        _ => {
+            let mut remote_addresses = HashMap::with_capacity(4);
+            remote_addresses.insert(remote_address.try_into()?, Some(layer_address.try_into()?));
+            Connected {
+                remote_addresses,
+                local_address: user_app_address.try_into()?,
+                // layer_addresses: Some(layer_address.try_into()?),
+            }
+        }
     };
 
     Arc::get_mut(&mut user_socket_info).unwrap().state = SocketState::Connected(connected);
@@ -506,7 +521,7 @@ pub(super) fn getpeername(
             .bypass(Bypass::LocalFdNotFound(sockfd))
             .and_then(|entry| match &entry.value().state {
                 SocketState::Connected(connected) => {
-                    Detour::Success(connected.remote_address.clone())
+                    Detour::Success(connected.remote_addresses.keys().last()?.clone())
                 }
                 _ => Detour::Bypass(Bypass::InvalidState(sockfd)),
             })?
@@ -577,10 +592,12 @@ pub(super) fn accept(
             })?
     };
 
+    let mut remote_addresses = HashMap::with_capacity(4);
+    remote_addresses.insert(remote_address.clone(), None);
+
     let state = SocketState::Connected(Connected {
-        remote_address: remote_address.clone(),
+        remote_addresses,
         local_address,
-        layer_address: None,
     });
     let new_socket = UserSocket::new(domain, type_, protocol, state, type_.try_into()?);
 
@@ -795,10 +812,10 @@ pub(super) fn recv_from(
     let address = SOCKETS
         .get(&sockfd)
         .map(|socket| match &socket.state {
-            SocketState::Connected(connected) => connected.remote_address.clone(),
+            SocketState::Connected(connected) => connected.remote_addresses.clone(),
             _ => unreachable!(),
         })
-        .map(SocketAddress::try_into)??;
+        .map(|addresses| addresses.keys().last().cloned())??;
 
     let recv_from_result = unsafe {
         FN_RECV_FROM(
@@ -811,7 +828,7 @@ pub(super) fn recv_from(
         )
     };
 
-    fill_address(raw_source, source_length, address)?;
+    fill_address(raw_source, source_length, address.try_into()?)?;
 
     Detour::Success(recv_from_result)
 }
@@ -841,12 +858,16 @@ pub(super) fn send_to(
         .remove(&sockfd)
         .ok_or(Bypass::LocalFdNotFound(sockfd))?;
 
-    connect_outgoing::<UDP, false>(sockfd, destination, user_socket_info)?;
+    connect_outgoing::<UDP, false>(sockfd, destination.clone(), user_socket_info)?;
 
     let layer_address: SockAddr = SOCKETS
         .get(&sockfd)
-        .and_then(|socket| match &socket.state {
-            SocketState::Connected(connected) => connected.layer_address.clone(),
+        .zip(destination.as_socket())
+        .and_then(|(socket, destination)| match &socket.state {
+            SocketState::Connected(connected) => connected
+                .remote_addresses
+                .get(&destination.try_into().ok()?)
+                .cloned()?,
             _ => unreachable!(),
         })
         .map(SocketAddress::try_into)??;

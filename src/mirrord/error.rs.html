@@ -192,6 +192,27 @@
 <a href="#192" id="192">192</a>
 <a href="#193" id="193">193</a>
 <a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::path::PathBuf;
 
 <span class="kw">use </span>miette::Diagnostic;
@@ -247,6 +268,27 @@
     {GENERAL_HELP}&quot;#
     </span>))]
     </span>OperatorConnectionFailed(<span class="attr">#[from] </span>OperatorApiError),
+    <span class="attr">#[error(<span class="string">&quot;Failed to connect to the operator. Someone else is stealing traffic from the requested target&quot;</span>)]
+    #[diagnostic(help(
+        <span class="string">r#&quot;
+    If you want to run anyway please set the following:
+    
+    {{
+      &quot;feature&quot;: {{
+        &quot;network&quot;: {{
+          &quot;incoming&quot;: {{
+            ...
+            &quot;on_concurrent_steal&quot;: &quot;continue&quot; // or &quot;override&quot;
+          }}
+        }}
+      }}
+    }}
+
+    More info (https://mirrord.dev/docs/overview/configuration/#feature-network-incoming-on_concurrent_steal)
+
+    {GENERAL_HELP}&quot;#
+    </span>))]
+    </span>OperatorConcurrentSteal,
     <span class="attr">#[error(<span class="string">&quot;Failed to create Kubernetes API. {0:#?}&quot;</span>)]
     #[diagnostic(help(
         <span class="string">r#&quot;

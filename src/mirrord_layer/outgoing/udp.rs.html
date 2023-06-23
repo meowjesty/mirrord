@@ -343,9 +343,6 @@
 <a href="#343" id="343">343</a>
 <a href="#344" id="344">344</a>
 <a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::{
     collections::HashMap,
     future::Future,
@@ -369,7 +366,7 @@
     task,
 };
 <span class="kw">use </span>tokio_stream::{wrappers::ReceiverStream, StreamExt};
-<span class="kw">use </span>tracing::{debug, error, info, trace, warn};
+<span class="kw">use </span>tracing::{error, info, trace, warn};
 
 <span class="kw">use super</span>::<span class="kw-2">*</span>;
 <span class="kw">use crate</span>::{common::ResponseDeque, detour::DetourGuard, error::LayerError};
@@ -437,14 +434,13 @@
 }
 
 <span class="kw">impl </span>UdpOutgoingHandler {
-    <span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, skip(layer_tx, mirror_socket, remote_rx))]
+    <span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, ret, skip(layer_tx, remote_rx))]
     </span><span class="kw">async fn </span>interceptor_task(
         layer_tx: Sender&lt;LayerUdpOutgoing&gt;,
         connection_id: ConnectionId,
         mirror_socket: UdpSocket,
         remote_rx: Receiver&lt;Vec&lt;u8&gt;&gt;,
     ) {
-        <span class="macro">debug!</span>(<span class="string">&quot;UDP interceptor started.&quot;</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>remote_stream = ReceiverStream::new(remote_rx);
         <span class="kw">let </span><span class="kw-2">mut </span>recv_from_buffer = <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">1500</span>];
 
@@ -462,15 +458,13 @@
             }
         };
 
-        <span class="comment">// TODO(alex): Connect this socket to the user socket.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>user_address: <span class="prelude-ty">Option</span>&lt;SocketAddr&gt; = <span class="prelude-val">None</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>user_address: <span class="prelude-ty">Option</span>&lt;SocketAddr&gt; = <span class="prelude-val">None</span>;
 
         <span class="kw">loop </span>{
             <span class="macro">select! </span>{
                 biased; <span class="comment">// To allow local socket to be read before being closed
 
                 </span>read = mirror_socket.recv_from(<span class="kw-2">&amp;mut </span>recv_from_buffer) =&gt; {
-                    <span class="macro">debug!</span>(<span class="string">&quot;read from recv_from&quot;</span>);
                     <span class="kw">match </span>read {
                         <span class="prelude-val">Err</span>(fail) <span class="kw">if </span>fail.kind() == std::io::ErrorKind::WouldBlock =&gt; {
                             <span class="kw">continue</span>;
@@ -549,7 +543,7 @@
     ///
     /// - `UdpOutgoing::Write`: sends a `UdpOutgoingRequest::Write` message to (agent) with the data
     ///   that our interceptor socket intercepted.
-    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, skip(<span class="self">self</span>, tx))]
+    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, ret, skip(<span class="self">self</span>, tx))]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_hook_message(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         message: UdpOutgoing,
@@ -597,7 +591,7 @@
     ///
     /// - `UdpOutgoingResponse::Write`: (agent) sent some data to the remote host, currently this
     ///   response is only significant to handle errors when this send failed.
-    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, skip(<span class="self">self</span>))]
+    </span><span class="attr">#[tracing::instrument(level = <span class="string">&quot;trace&quot;</span>, ret, skip(<span class="self">self</span>))]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_daemon_message(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         response: DaemonUdpOutgoing,
@@ -615,10 +609,10 @@
 
                             <span class="kw">let </span>mirror_socket = <span class="kw">match </span>remote_address {
                                 SocketAddress::Ip(SocketAddr::V4(<span class="kw">_</span>)) =&gt; UdpSocket::bind(
-                                    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), <span class="number">0</span>),
+                                    SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), <span class="number">0</span>),
                                 ),
                                 SocketAddress::Ip(SocketAddr::V6(<span class="kw">_</span>)) =&gt; UdpSocket::bind(
-                                    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), <span class="number">0</span>),
+                                    SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), <span class="number">0</span>),
                                 ),
                                 SocketAddress::Unix(<span class="kw">_</span>) =&gt; {
                                     <span class="comment">// This should never happen. If we&#39;re here - the agent reported

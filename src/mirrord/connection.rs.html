@@ -99,12 +99,14 @@
 <a href="#99" id="99">99</a>
 <a href="#100" id="100">100</a>
 <a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
 </pre><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
-<span class="kw">use </span>miette::IntoDiagnostic;
 <span class="kw">use </span>mirrord_config::LayerConfig;
 <span class="kw">use </span>mirrord_kube::api::{kubernetes::KubernetesAPI, AgentManagment};
-<span class="kw">use </span>mirrord_operator::client::OperatorApi;
+<span class="kw">use </span>mirrord_operator::client::{OperatorApi, OperatorApiError};
 <span class="kw">use </span>mirrord_progress::Progress;
 <span class="kw">use </span>mirrord_protocol::{ClientMessage, DaemonMessage};
 <span class="kw">use </span>tokio::sync::mpsc;
@@ -127,34 +129,38 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>connect_operator&lt;P&gt;(
     config: <span class="kw-2">&amp;</span>LayerConfig,
     progress: <span class="kw-2">&amp;</span>P,
-) -&gt; <span class="prelude-ty">Option</span>&lt;(mpsc::Sender&lt;ClientMessage&gt;, mpsc::Receiver&lt;DaemonMessage&gt;)&gt;
+) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;(mpsc::Sender&lt;ClientMessage&gt;, mpsc::Receiver&lt;DaemonMessage&gt;)&gt;, CliError&gt;
 <span class="kw">where
     </span>P: Progress + Send + Sync,
 {
     <span class="kw">let </span>sub_progress = progress.subtask(<span class="string">&quot;checking operator&quot;</span>);
 
-    <span class="kw">match </span>OperatorApi::discover(config, progress)
-        .<span class="kw">await
-        </span>.map_err(CliError::OperatorConnectionFailed)
-        .into_diagnostic()
-    {
+    <span class="kw">match </span>OperatorApi::discover(config, progress).<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(connection)) =&gt; {
             sub_progress.done_with(<span class="string">&quot;connected to operator&quot;</span>);
 
-            <span class="prelude-val">Some</span>(connection)
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(connection))
         }
         <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
             sub_progress.done_with(<span class="string">&quot;no operator detected&quot;</span>);
 
-            <span class="prelude-val">None
-        </span>}
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+        }
+        <span class="prelude-val">Err</span>(OperatorApiError::ConcurrentStealAbort) =&gt; {
+            sub_progress.fail_with(<span class="string">&quot;operator concurrent port steal lock&quot;</span>);
+
+            <span class="prelude-val">Err</span>(CliError::OperatorConcurrentSteal)
+        }
         <span class="prelude-val">Err</span>(err) =&gt; {
-            sub_progress.done_with(<span class="string">&quot;unable to check if operator exists, probably due to RBAC&quot;</span>);
+            sub_progress.fail_with(<span class="string">&quot;unable to check if operator exists, probably due to RBAC&quot;</span>);
 
-            <span class="macro">trace!</span>(<span class="string">&quot;{err}&quot;</span>);
+            <span class="macro">trace!</span>(
+                <span class="string">&quot;{}&quot;</span>,
+                miette::Error::from(CliError::OperatorConnectionFailed(err))
+            );
 
-            <span class="prelude-val">None
-        </span>}
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+        }
     }
 }
 
@@ -166,7 +172,7 @@
 <span class="kw">where
     </span>P: Progress + Send + Sync,
 {
-    <span class="kw">if </span>config.operator &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>((sender, receiver)) = connect_operator(config, progress).<span class="kw">await </span>{
+    <span class="kw">if </span>config.operator &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>((sender, receiver)) = connect_operator(config, progress).<span class="kw">await</span><span class="question-mark">? </span>{
         <span class="prelude-val">Ok</span>((
             AgentConnectInfo::Operator,
             AgentConnection { sender, receiver },

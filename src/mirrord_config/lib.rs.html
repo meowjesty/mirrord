@@ -700,6 +700,7 @@
 <a href="#700" id="700">700</a>
 <a href="#701" id="701">701</a>
 <a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
 </pre><pre class="rust"><code><span class="attr">#![feature(slice_concat_trait)]
 #![feature(once_cell)]
 #![feature(result_option_inspect)]
@@ -1295,6 +1296,7 @@
                             ignore_localhost: <span class="prelude-val">None</span>,
                             ignore_ports: <span class="prelude-val">None</span>,
                             listen_ports: <span class="prelude-val">None</span>,
+                            on_concurrent_steal: <span class="prelude-val">None</span>,
                         }),
                     ))),
                     outgoing: <span class="prelude-val">Some</span>(ToggleableConfig::Config(OutgoingFileConfig {

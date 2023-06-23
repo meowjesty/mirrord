@@ -384,6 +384,7 @@
 <a href="#384" id="384">384</a>
 <a href="#385" id="385">385</a>
 <a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
 </pre><pre class="rust"><code><span class="kw">mod </span>steal;
 
 <span class="attr">#[cfg(test)]
@@ -698,6 +699,7 @@
 
     <span class="attr">#[rstest]
     #[tokio::test(flavor = <span class="string">&quot;multi_thread&quot;</span>, worker_threads = <span class="number">2</span>)]
+    #[timeout(Duration::from_secs(<span class="number">120</span>))]
     </span><span class="kw">pub async fn </span>gethostname_remote_result(<span class="attr">#[future] </span>hostname_service: KubeService) {
         <span class="kw">let </span>service = hostname_service.<span class="kw">await</span>;
         <span class="kw">let </span>node_command = <span class="macro">vec!</span>[<span class="string">&quot;python3&quot;</span>, <span class="string">&quot;-u&quot;</span>, <span class="string">&quot;python-e2e/hostname.py&quot;</span>];

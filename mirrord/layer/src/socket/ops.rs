@@ -321,12 +321,16 @@ fn connect_outgoing<const PROTOCOL: ConnectProtocol, const CALL_CONNECT: bool>(
     // Should look into what happens if the user passes a name to be resolved here, and how it
     // interacts with the selector only allowing certain addresses (and not allowing the remote DNS
     // resolver to do it's thing).
-    OUTGOING_SELECTOR
-        .get()?
-        .connect_remote::<PROTOCOL>(remote_address.as_socket()?)
-        .then_some(())?;
-
-    debug!("keep going, connecting to {remote_address:#?}");
+    {
+        OUTGOING_SELECTOR
+            .lock()?
+            .connect_remote::<PROTOCOL>(remote_address.as_socket()?)
+            .then_some(())?;
+    }
+    debug!(
+        "keep going, connecting to {:#?}",
+        remote_address.as_socket()
+    );
 
     // Prepare this socket to be intercepted.
     let (mirror_tx, mirror_rx) = oneshot::channel();
@@ -702,7 +706,7 @@ pub(super) fn dup<const SWITCH_MAP: bool>(fd: c_int, dup_fd: i32) -> Result<(), 
 ///
 /// `-layer` sends a request to `-agent` asking for the `-agent`'s list of `addrinfo`s (remote call
 /// for the equivalent of this function).
-#[tracing::instrument(level = "trace", ret)]
+#[tracing::instrument(level = "debug", ret)]
 pub(super) fn getaddrinfo(
     rawish_node: Option<&CStr>,
     rawish_service: Option<&CStr>,
@@ -795,8 +799,6 @@ pub(super) fn getaddrinfo(
             previous
         })
         .ok_or(HookError::DNSNoName)?;
-
-    debug!("getaddrinfo -> result {:#?}", result);
 
     Detour::Success(result)
 }

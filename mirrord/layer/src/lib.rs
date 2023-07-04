@@ -78,7 +78,7 @@ use std::{
     net::SocketAddr,
     panic,
     str::FromStr,
-    sync::{OnceLock, RwLock},
+    sync::{Arc, LazyLock, Mutex, OnceLock, RwLock},
 };
 
 use bimap::BiMap;
@@ -228,6 +228,8 @@ pub(crate) static ENABLED_TCP_OUTGOING: OnceLock<bool> = OnceLock::new();
 /// Used to change the behavior of the `socket::ops::connect` hook operation.
 pub(crate) static ENABLED_UDP_OUTGOING: OnceLock<bool> = OnceLock::new();
 
+pub(crate) static REMOTE_DNS: OnceLock<bool> = OnceLock::new();
+
 /// Unix streams to connect to remotely.
 ///
 /// ## Usage
@@ -265,7 +267,8 @@ pub(crate) static INCOMING_IGNORE_PORTS: OnceLock<HashSet<u16>> = OnceLock::new(
 // will `ToSocketAddrs` respect mirrord's `getaddrinfo`?
 /// Selector for how outgoing connection will behave, either sending traffic via the remote or from
 /// local app, according to how the user set up the `remote`, and `local` filter.
-pub(crate) static OUTGOING_SELECTOR: OnceLock<OutgoingSelector> = OnceLock::new();
+pub(crate) static OUTGOING_SELECTOR: LazyLock<Arc<Mutex<OutgoingSelector>>> =
+    LazyLock::new(|| Arc::new(Mutex::default()));
 
 /// Ports to ignore because they are used by the IDE debugger
 pub(crate) static DEBUGGER_IGNORED_PORTS: OnceLock<DebuggerPorts> = OnceLock::new();
@@ -417,12 +420,17 @@ fn set_globals(config: &LayerConfig) {
     FILE_MODE
         .set(config.feature.fs.clone())
         .expect("Setting FILE_MODE failed.");
+
+    // These must come BEFORE `OUTGOING_SELECTOR` initialization.
     ENABLED_TCP_OUTGOING
         .set(config.feature.network.outgoing.tcp)
         .expect("Setting ENABLED_TCP_OUTGOING singleton");
     ENABLED_UDP_OUTGOING
         .set(config.feature.network.outgoing.udp)
         .expect("Setting ENABLED_UDP_OUTGOING singleton");
+    REMOTE_DNS
+        .set(config.feature.network.dns)
+        .expect("Setting REMOTE_DNS singleton");
 
     {
         let outgoing_remote = config
@@ -444,10 +452,12 @@ fn set_globals(config: &LayerConfig) {
             .collect();
 
         // This will crash the app if it comes before `ENABLED_(TCP|UDP)_OUTGOING`!
-        let outgoing_selector = OutgoingSelector::new(outgoing_remote, outgoing_local);
+        let outgoing_selector =
+            OutgoingSelector::new(outgoing_remote, outgoing_local, config.feature.network.dns);
         OUTGOING_SELECTOR
-            .set(outgoing_selector)
-            .expect("Setting OUTGOING_SELECTOR singleton");
+            .lock()
+            .expect("Initialization lock should not fail!")
+            .clone_from(&outgoing_selector);
     }
 
     REMOTE_UNIX_STREAMS

@@ -296,7 +296,10 @@ pub(crate) struct OutgoingSelector {
 }
 
 impl OutgoingSelector {
-    pub(crate) fn new(remote: HashSet<OutgoingFilter>, local: HashSet<OutgoingFilter>) -> Self {
+    pub(crate) fn new(
+        remote_filter: HashSet<OutgoingFilter>,
+        local_filter: HashSet<OutgoingFilter>,
+    ) -> Self {
         use mirrord_config::feature::network::outgoing::*;
 
         let enabled_tcp = *ENABLED_TCP_OUTGOING
@@ -307,7 +310,7 @@ impl OutgoingSelector {
             .get()
             .expect("ENABLED_TCP_OUTGOING should be set before initializing OutgoingSelector!");
 
-        let remote = remote
+        let remote = remote_filter
             .into_iter()
             .filter(|OutgoingFilter { protocol, .. }| match protocol {
                 ProtocolFilter::Any => enabled_tcp || enabled_udp,
@@ -316,7 +319,7 @@ impl OutgoingSelector {
             })
             .collect();
 
-        let local = local
+        let local = local_filter
             .into_iter()
             .filter(|OutgoingFilter { protocol, .. }| match protocol {
                 ProtocolFilter::Any => enabled_tcp || enabled_udp,
@@ -328,7 +331,11 @@ impl OutgoingSelector {
         Self { remote, local }
     }
 
-    #[tracing::instrument(level = "debug", ret)]
+    // TODO(alex) [high] 2023-07-04: Manually resolve the addresses if `REMOTE_DNS` is set to true,
+    // otherwise call `ToSocketAddrs`, but in both cases, we remove the `(name, port)` filters and
+    // add the resolved socket addresses into `self`.
+    //
+    // #[tracing::instrument(level = "debug", ret)]
     fn connect_remote<const PROTOCOL: ConnectProtocol>(&self, address: SocketAddr) -> bool {
         use mirrord_config::feature::network::outgoing::{OutgoingAddress, ProtocolFilter};
 
@@ -360,8 +367,18 @@ impl OutgoingSelector {
             }
         };
 
-        self.remote.iter().filter(filter_protocol).any(any_address)
-            || !self.local.iter().filter(filter_protocol).any(any_address)
+        // TODO(alex) [high] 2023-07-04: Address name resolution is finnicky, if they don't resolve
+        // the exact same address, we don't match.
+        //
+        // We can modify `getaddrinfo` to return a list of `SocketAddr`, maybe even at Selector
+        // build time, then add those addresses to the selector and compare them here, if DNS is
+        // enabled.
+        let remote = self.remote.iter().filter(filter_protocol).any(any_address);
+        let local = !self.local.iter().filter(filter_protocol).any(any_address);
+
+        debug!("\nremote {remote:?} || {local:?} local\n");
+
+        remote || local
     }
 }
 

@@ -132,6 +132,7 @@ var sourcesIndex = JSON.parse('{\
 "enum_as_inner":["",[],["lib.rs"]],\
 "enum_dispatch":["",[],["attributed_parser.rs","cache.rs","enum_dispatch_arg_list.rs","enum_dispatch_item.rs","enum_dispatch_variant.rs","expansion.rs","filter_attrs.rs","lib.rs","supported_generics.rs","syn_utils.rs"]],\
 "env_logger":["",[["filter",[],["mod.rs","regex.rs"]],["fmt",[["humantime",[],["extern_impl.rs","mod.rs"]],["writer",[["termcolor",[],["extern_impl.rs","mod.rs"]]],["atty.rs","mod.rs"]]],["mod.rs"]]],["lib.rs"]],\
+"equivalent":["",[],["lib.rs"]],\
 "errno":["",[],["lib.rs","unix.rs"]],\
 "exec":["",[],["lib.rs"]],\
 "faccess":["",[],["lib.rs"]],\
@@ -188,7 +189,7 @@ var sourcesIndex = JSON.parse('{\
 "iana_time_zone":["",[],["ffi_utils.rs","lib.rs","tz_linux.rs"]],\
 "ident_case":["",[],["lib.rs"]],\
 "idna":["",[],["lib.rs","punycode.rs","uts46.rs"]],\
-"indexmap":["",[["map",[["core",[],["raw.rs"]]],["core.rs"]]],["arbitrary.rs","equivalent.rs","lib.rs","macros.rs","map.rs","mutable_keys.rs","set.rs","util.rs"]],\
+"indexmap":["",[["map",[["core",[],["raw.rs"]]],["core.rs","iter.rs","slice.rs"]],["set",[],["iter.rs","slice.rs"]]],["arbitrary.rs","lib.rs","macros.rs","map.rs","mutable_keys.rs","set.rs","util.rs"]],\
 "inout":["",[],["errors.rs","inout.rs","inout_buf.rs","lib.rs","reserved.rs"]],\
 "instant":["",[],["lib.rs","native.rs"]],\
 "io_lifetimes":["",[],["example_ffi.rs","lib.rs","portability.rs","raw.rs","traits.rs","views.rs"]],\
@@ -240,6 +241,7 @@ var sourcesIndex = JSON.parse('{\
 "mio":["",[["event",[],["event.rs","events.rs","mod.rs","source.rs"]],["net",[["tcp",[],["listener.rs","mod.rs","stream.rs"]],["uds",[],["datagram.rs","listener.rs","mod.rs","stream.rs"]]],["mod.rs","udp.rs"]],["sys",[["unix",[["selector",[],["epoll.rs","mod.rs"]],["uds",[],["datagram.rs","listener.rs","mod.rs","socketaddr.rs","stream.rs"]]],["mod.rs","net.rs","pipe.rs","sourcefd.rs","tcp.rs","udp.rs","waker.rs"]]],["mod.rs"]]],["interest.rs","io_source.rs","lib.rs","macros.rs","poll.rs","token.rs","waker.rs"]],\
 "mirrord":["",[],["config.rs","connection.rs","error.rs","execution.rs","extension.rs","extract.rs","internal_proxy.rs","main.rs","operator.rs"]],\
 "mirrord_agent":["",[["outgoing",[],["socket_stream.rs","udp.rs"]],["runtime",[],["crio.rs"]],["steal",[["http",[],["error.rs","filter.rs","hyper_handler.rs","reversible_stream.rs","v1.rs","v2.rs"]],["ip_tables",[],["chain.rs","flush_connections.rs","mesh.rs","redirect.rs","standard.rs"]]],["api.rs","connection.rs","http.rs","ip_tables.rs","orig_dst.rs"]]],["cli.rs","container_handle.rs","dns.rs","env.rs","error.rs","file.rs","main.rs","outgoing.rs","runtime.rs","sniffer.rs","steal.rs","util.rs","watched_task.rs"]],\
+"mirrord_analytics":["",[],["lib.rs"]],\
 "mirrord_auth":["",[],["certificate.rs","credential_store.rs","credentials.rs","error.rs","key_pair.rs","lib.rs"]],\
 "mirrord_config":["",[["config",[],["deprecated.rs","from_env.rs","source.rs","unstable.rs"]],["feature",[["fs",[],["advanced.rs","mode.rs"]],["network",[["incoming",[],["http_filter.rs"]]],["incoming.rs","outgoing.rs"]]],["env.rs","fs.rs","network.rs"]]],["agent.rs","config.rs","feature.rs","lib.rs","target.rs","util.rs"]],\
 "mirrord_config_derive":["",[["config",[],["field.rs","flag.rs"]]],["config.rs","lib.rs"]],\

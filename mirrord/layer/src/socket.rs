@@ -19,13 +19,13 @@ use mirrord_config::{
 };
 use mirrord_protocol::outgoing::SocketAddress;
 use socket2::SockAddr;
-use tracing::warn;
+use tracing::{debug, warn};
 use trust_dns_resolver::config::Protocol;
 
 use self::id::SocketId;
 use crate::{
     common::{blocking_send_hook_message, HookMessage},
-    detour::{Bypass, Detour, OptionExt},
+    detour::{Bypass, Detour, DetourGuard, OptionExt},
     error::{HookError, HookResult, LayerError},
     socket::ops::remote_getaddrinfo,
     ENABLED_TCP_OUTGOING, ENABLED_UDP_OUTGOING, INCOMING_IGNORE_PORTS, REMOTE_DNS,
@@ -361,11 +361,11 @@ impl OutgoingSelector {
     ///
     /// So if the user specified a selector with `0.0.0.0:0`, we're going to be always matching on
     /// it.
-    #[tracing::instrument(level = "trace", ret)]
+    #[tracing::instrument(level = "info", ret)]
     fn connect_remote<const PROTOCOL: ConnectProtocol>(
         &self,
         address: SocketAddr,
-    ) -> HookResult<bool> {
+    ) -> HookResult<HashSet<SocketAddr>> {
         let filter_protocol = |outgoing: &&OutgoingFilter| match outgoing.protocol {
             ProtocolFilter::Any => true,
             ProtocolFilter::Tcp if PROTOCOL == TCP => true,
@@ -377,7 +377,7 @@ impl OutgoingSelector {
             |outgoing: &&OutgoingFilter| !matches!(outgoing.address, AddressFilter::Name(_));
 
         // Closure that tries to match `address` with something in the selector set.
-        let any_address = |outgoing: &OutgoingFilter| match outgoing.address {
+        let filter_address = |outgoing: &&OutgoingFilter| match outgoing.address {
             AddressFilter::Socket(select_address) => {
                 (select_address.ip().is_unspecified() && select_address.port() == 0)
                     || (select_address.ip().is_unspecified()
@@ -400,20 +400,38 @@ impl OutgoingSelector {
         };
         let hosts = resolved_hosts.iter();
 
+        // TODO(alex) [high] 2023-08-07: This is not quite right! We want to change IP addresses
+        // when it's local, and when `remote` doesn't match anything. In short: we change ip to
+        // locally resolved address whenever filter wants to connect local.
         Ok(match self {
-            OutgoingSelector::Unfiltered => true,
+            OutgoingSelector::Unfiltered => HashSet::default(),
             OutgoingSelector::Remote(list) => list
                 .iter()
                 .filter(skip_unresolved)
                 .chain(hosts)
                 .filter(filter_protocol)
-                .any(any_address),
-            OutgoingSelector::Local(list) => !list
+                .filter(filter_address)
+                .map(|_| address)
+                .collect(),
+            OutgoingSelector::Local(list) => list
                 .iter()
                 .filter(skip_unresolved)
                 .chain(hosts)
                 .filter(filter_protocol)
-                .any(any_address),
+                .filter(filter_address)
+                .map(|filter| match &filter.address {
+                    AddressFilter::Name((name, port)) => {
+                        let resolved = name
+                            .to_socket_addrs()
+                            .unwrap()
+                            .find(SocketAddr::is_ipv4)
+                            .unwrap();
+
+                        SocketAddr::from((resolved.ip(), *port))
+                    }
+                    _ => address,
+                })
+                .collect(),
         })
     }
 
@@ -425,7 +443,7 @@ impl OutgoingSelector {
     ///
     /// `REMOTE` controls whether the named hosts should be resolved remotely, by checking if we're
     /// dealing with [`OutgoingSelector::Remote`] and [`REMOTE_DNS`] is set.
-    #[tracing::instrument(level = "trace", ret)]
+    #[tracing::instrument(level = "debug", ret)]
     fn resolve_dns<const REMOTE: bool>(&self) -> HookResult<HashSet<OutgoingFilter>> {
         // Closure that tries to match `address` with something in the selector set.
         let is_name =
@@ -467,6 +485,7 @@ impl OutgoingSelector {
                     )?
                     .into_iter()
             } else {
+                debug!("We are local boys!");
                 // Resolve DNS locally.
                 unresolved
                     .try_fold(

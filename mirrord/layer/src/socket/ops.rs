@@ -307,11 +307,11 @@ fn connect_outgoing<const PROTOCOL: ConnectProtocol, const CALL_CONNECT: bool>(
     remote_address: SockAddr,
     mut user_socket_info: Arc<UserSocket>,
 ) -> Detour<ConnectResult> {
-    if remote_address.is_unix()
-        || OUTGOING_SELECTOR
-            .get()?
-            .connect_remote::<PROTOCOL>(remote_address.as_socket()?)?
-    {
+    let filtered = OUTGOING_SELECTOR
+        .get()?
+        .connect_remote::<PROTOCOL>(remote_address.as_socket()?);
+
+    if remote_address.is_unix() || !filtered?.is_empty() {
         // Prepare this socket to be intercepted.
         let (mirror_tx, mirror_rx) = oneshot::channel();
 
@@ -719,13 +719,13 @@ pub(super) fn remote_getaddrinfo(
 ///
 /// `-layer` sends a request to `-agent` asking for the `-agent`'s list of `addrinfo`s (remote call
 /// for the equivalent of this function).
-#[tracing::instrument(level = "trace", ret)]
+#[tracing::instrument(level = "debug", ret)]
 pub(super) fn getaddrinfo(
     rawish_node: Option<&CStr>,
     rawish_service: Option<&CStr>,
     raw_hints: Option<&libc::addrinfo>,
 ) -> Detour<*mut libc::addrinfo> {
-    let node = rawish_node
+    let node: String = rawish_node
         .bypass(Bypass::NullNode)?
         .to_str()
         .map_err(|fail| {
@@ -737,6 +737,26 @@ pub(super) fn getaddrinfo(
             Bypass::CStrConversion
         })?
         .into();
+
+    if let Some(outgoing_selector) = OUTGOING_SELECTOR.get() {
+        info!("There is selector!");
+        if let OutgoingSelector::Local(local_filter) = outgoing_selector {
+            info!("There is local filter!");
+
+            if let Some(found) = local_filter.iter().find(|filter| {
+                filter.address == AddressFilter::Name((node.clone(), filter.address.port()))
+            }) {
+                info!("There is local found!");
+                info!("{found:#?}");
+            }
+        }
+    }
+
+    if let Some(outgoing_selector) = OUTGOING_SELECTOR.get()
+        && let OutgoingSelector::Local(local_filter) = outgoing_selector
+        && local_filter.iter().find(|filter| filter.address == AddressFilter::Name((node.clone(), 0))).is_some() {
+        Detour::Bypass(Bypass::LocalDnsResolution)?;
+    };
 
     let service = rawish_service
         .map(CStr::to_str)

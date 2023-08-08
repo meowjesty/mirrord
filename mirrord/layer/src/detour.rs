@@ -203,6 +203,10 @@ pub(crate) enum Bypass {
     /// Outgoing connection either did not match any `remote` selector, or it matched a `local`
     /// one.
     FilteredConnection,
+
+    /// Tried resolving a host name that was set in the `local` outgoing traffic filter, so we
+    /// want to resolve this locally.
+    LocalDnsResolution,
 }
 
 /// [`ControlFlow`](std::ops::ControlFlow)-like enum to be used by hooks.

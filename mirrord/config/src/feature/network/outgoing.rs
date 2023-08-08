@@ -225,6 +225,16 @@ pub enum AddressFilter {
     Subnet((ipnet::IpNet, u16)),
 }
 
+impl AddressFilter {
+    pub fn port(&self) -> u16 {
+        match self {
+            AddressFilter::Socket(socket) => socket.port(),
+            AddressFilter::Name((_, port)) => *port,
+            AddressFilter::Subnet((_, port)) => *port,
+        }
+    }
+}
+
 /// <!--${internal}-->
 /// The parsed filter with its [`ProtocolFilter`] and [`AddressFilter`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -234,6 +244,15 @@ pub struct OutgoingFilter {
 
     /// Address|name|subnet we're going to filter.
     pub address: AddressFilter,
+}
+
+impl OutgoingFilter {
+    pub fn new_named(protocol: ProtocolFilter, host_name: String) -> Self {
+        Self {
+            protocol,
+            address: AddressFilter::Name((host_name, 0)),
+        }
+    }
 }
 
 /// <!--${internal}-->

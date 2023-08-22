@@ -4,6 +4,7 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use mirrord_protocol::{
+    dns::{DnsLookup, GetAddrInfoRequest, GetAddrInfoResponse, LookupRecord},
     outgoing::{
         tcp::{DaemonTcpOutgoing, LayerTcpOutgoing},
         DaemonConnect, DaemonRead, LayerConnect, LayerWrite, SocketAddress,
@@ -16,6 +17,7 @@ mod common;
 
 pub use common::*;
 use futures::{SinkExt, TryStreamExt};
+use trust_dns_resolver::lookup::Lookup;
 
 async fn outgoing_filter_hostname_matches(
     with_config: Option<&str>,
@@ -93,34 +95,46 @@ async fn outgoing_filter_remote_hostname_matches(
     let (mut test_process, layer_connection) = Application::RustOutgoingFilter
         .start_process_with_layer(dylib_path, vec![], config)
         .await;
-    let mut conn = layer_connection.codec;
+    let mut connection = layer_connection.codec;
 
-    let peers = RUST_OUTGOING_PEERS
-        .split(',')
-        .map(|s| s.parse::<SocketAddr>().unwrap())
-        .collect::<Vec<_>>();
-
-    for peer in peers {
-        let msg = conn.try_next().await.unwrap().unwrap();
-        let ClientMessage::TcpOutgoing(LayerTcpOutgoing::Connect(LayerConnect { remote_address: SocketAddress::Ip(addr) })) = msg else {
+    let msg = connection.try_next().await.unwrap().unwrap();
+    let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-        assert_eq!(addr, peer);
-        conn.send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Connect(Ok(
-            DaemonConnect {
-                connection_id: 0,
-                remote_address: addr.into(),
-                local_address: RUST_OUTGOING_LOCAL.parse::<SocketAddr>().unwrap().into(),
-            },
+    assert_eq!(node, "service.name".to_string());
+
+    connection
+        .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(
+            DnsLookup(vec![LookupRecord {
+                name: node,
+                ip: "1.2.3.4".parse().unwrap(),
+            }]),
         ))))
         .await
         .unwrap();
 
-        let msg = conn.try_next().await.unwrap().unwrap();
-        let ClientMessage::TcpOutgoing(LayerTcpOutgoing::Write(LayerWrite { connection_id: 0, bytes })) = msg else {
+    let msg = connection.try_next().await.unwrap().unwrap();
+    let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-        conn.send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Read(Ok(
+    assert_eq!(node, "service.name".to_string());
+
+    connection
+        .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(
+            DnsLookup(vec![LookupRecord {
+                name: node,
+                ip: "1.2.3.4".parse().unwrap(),
+            }]),
+        ))))
+        .await
+        .unwrap();
+
+    let msg = connection.try_next().await.unwrap().unwrap();
+    let ClientMessage::TcpOutgoing(LayerTcpOutgoing::Write(LayerWrite { connection_id: 0, bytes })) = msg else {
+            panic!("Invalid message received from layer: {msg:?}");
+        };
+    connection
+        .send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Read(Ok(
             DaemonRead {
                 connection_id: 0,
                 bytes,
@@ -128,10 +142,10 @@ async fn outgoing_filter_remote_hostname_matches(
         ))))
         .await
         .unwrap();
-        conn.send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Close(0)))
-            .await
-            .unwrap();
-    }
+    connection
+        .send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Close(0)))
+        .await
+        .unwrap();
 
     test_process.wait_assert_success().await;
 }

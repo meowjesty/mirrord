@@ -351,6 +351,9 @@ jobs:
           cd mirrord/layer/tests/apps/outgoing
           cargo build
       - run: |
+          cd mirrord/layer/tests/apps/outgoing_filter
+          cargo build
+      - run: |
           cd mirrord/layer/tests/apps/recv_from
           cargo build
       - run: |
@@ -423,6 +426,9 @@ jobs:
           cargo build
       - run: |
           cd mirrord/layer/tests/apps/outgoing
+          cargo build
+      - run: |
+          cd mirrord/layer/tests/apps/outgoing_filter
           cargo build
       - run: |
           cd mirrord/layer/tests/apps/recv_from

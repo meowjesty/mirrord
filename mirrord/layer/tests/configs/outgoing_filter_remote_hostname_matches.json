@@ -5,7 +5,7 @@
             "dns": true,
             "outgoing": {
                 "filter": {
-                    "remote": ["rust-lang.org"]
+                    "remote": ["service.name"]
                 }
             }
         }

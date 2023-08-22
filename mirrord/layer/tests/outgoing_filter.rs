@@ -3,6 +3,7 @@
 
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
+use futures::{SinkExt, StreamExt, TryStreamExt};
 use mirrord_protocol::{
     dns::{DnsLookup, GetAddrInfoRequest, GetAddrInfoResponse, LookupRecord},
     outgoing::{
@@ -16,7 +17,6 @@ use rstest::rstest;
 mod common;
 
 pub use common::*;
-use futures::{SinkExt, TryStreamExt};
 
 #[rstest]
 #[tokio::test]
@@ -33,16 +33,77 @@ async fn outgoing_filter_remote_hostname_matches(
     });
     let config = config.as_ref().map(|path_buf| path_buf.to_str().unwrap());
 
-    let (mut test_process, layer_connection) = Application::RustOutgoingFilter
+    let (mut test_process, mut layer_connection) = Application::RustOutgoingFilter
         .start_process_with_layer(dylib_path, vec![], config)
         .await;
-    let mut connection = layer_connection.codec;
+    // let mut connection = layer_connection.codec;
 
+    // Should we call `codec.next` or was it called outside already?
+    // open file
+    let open_file_request = layer_connection.codec.next().await.unwrap().unwrap();
+
+    assert_eq!(
+        open_file_request,
+        ClientMessage::FileRequest(mirrord_protocol::FileRequest::Open(
+            mirrord_protocol::file::OpenFileRequest {
+                path: PathBuf::from("/etc/hostname"),
+                open_options: mirrord_protocol::file::OpenOptionsInternal {
+                    read: true,
+                    write: false,
+                    append: false,
+                    truncate: false,
+                    create: false,
+                    create_new: false
+                }
+            }
+        ))
+    );
+    layer_connection.answer_file_open().await;
+
+    // read file
+    let read_request = layer_connection
+        .codec
+        .next()
+        .await
+        .expect("Read request success!")
+        .expect("Read request exists!");
+    assert_eq!(
+        read_request,
+        ClientMessage::FileRequest(mirrord_protocol::FileRequest::Read(
+            mirrord_protocol::file::ReadFileRequest {
+                remote_fd: 0xb16,
+                buffer_size: 256,
+            }
+        ))
+    );
+
+    layer_connection
+        .answer_file_read(b"metalbear-hostname".to_vec())
+        .await;
+
+    // TODO(alex): Add a wait time here, we can end up in the "Close request success" error.
+    // close file (very rarely?).
+    let close_request = layer_connection
+        .codec
+        .next()
+        .await
+        .expect("Close request success!")
+        .expect("Close request exists!");
+
+    println!("Should be a close file request: {read_request:#?}");
+    assert_eq!(
+        close_request,
+        ClientMessage::FileRequest(mirrord_protocol::FileRequest::Close(
+            mirrord_protocol::file::CloseFileRequest { fd: 0xb16 }
+        ))
+    );
+
+    let mut connection = layer_connection.codec;
     let msg = connection.try_next().await.unwrap().unwrap();
     let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-    assert_eq!(node, "localhost".to_string());
+    assert_eq!(node, "metalbear-hostname".to_string());
 
     connection
         .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(
@@ -58,7 +119,7 @@ async fn outgoing_filter_remote_hostname_matches(
     let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-    assert_eq!(node, "localhost".to_string());
+    assert_eq!(node, "metalbear-hostname".to_string());
 
     connection
         .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(

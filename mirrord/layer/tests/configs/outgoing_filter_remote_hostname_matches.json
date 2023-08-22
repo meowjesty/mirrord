@@ -5,7 +5,7 @@
             "dns": true,
             "outgoing": {
                 "filter": {
-                    "remote": ["localhost:7777"]
+                    "remote": ["metalbear-hostname:7777"]
                 }
             }
         }

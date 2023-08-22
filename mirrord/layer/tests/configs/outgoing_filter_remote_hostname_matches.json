@@ -1,6 +1,5 @@
 {
     "feature": {
-        "fs": false,
         "network": {
             "dns": true,
             "outgoing": {

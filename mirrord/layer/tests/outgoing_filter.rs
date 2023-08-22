@@ -130,18 +130,25 @@ async fn outgoing_filter_remote_hostname_matches(
         .unwrap();
 
     let msg = connection.try_next().await.unwrap().unwrap();
-    let ClientMessage::TcpOutgoing(LayerTcpOutgoing::Write(LayerWrite { connection_id: 0, bytes })) = msg else {
+    let ClientMessage::TcpOutgoing(LayerTcpOutgoing::Connect( LayerConnect { remote_address })) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
+    assert_eq!(
+        SocketAddr::try_from(remote_address.clone()).unwrap(),
+        "1.2.3.4:7777".parse::<SocketAddr>().unwrap()
+    );
+
     connection
-        .send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Read(Ok(
-            DaemonRead {
+        .send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Connect(Ok(
+            DaemonConnect {
                 connection_id: 0,
-                bytes,
+                remote_address,
+                local_address: SocketAddress::Ip("127.0.0.1:8888".parse().unwrap()),
             },
         ))))
         .await
         .unwrap();
+
     connection
         .send(DaemonMessage::TcpOutgoing(DaemonTcpOutgoing::Close(0)))
         .await

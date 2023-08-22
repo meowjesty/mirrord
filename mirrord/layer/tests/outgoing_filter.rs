@@ -22,7 +22,7 @@ use futures::{SinkExt, TryStreamExt};
 #[tokio::test]
 #[timeout(Duration::from_secs(10))]
 async fn outgoing_filter_remote_hostname_matches(
-    #[values(None, Some("outgoing_filter_hostname.json"))] with_config: Option<&str>,
+    #[values(Some("outgoing_filter_remote_hostname_matches.json"))] with_config: Option<&str>,
     dylib_path: &PathBuf,
     config_dir: &PathBuf,
 ) {

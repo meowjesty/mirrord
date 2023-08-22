@@ -1,5 +1,6 @@
 {
     "feature": {
+        "fs": false,
         "network": {
             "outgoing": {
                 "filter": {

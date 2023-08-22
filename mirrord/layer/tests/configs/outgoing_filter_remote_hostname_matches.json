@@ -2,6 +2,7 @@
     "feature": {
         "fs": false,
         "network": {
+            "dns": true,
             "outgoing": {
                 "filter": {
                     "remote": ["rust-lang.org"]

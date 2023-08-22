@@ -626,6 +626,7 @@ pub enum Application {
     Go19SelfOpen,
     RustOutgoingUdp,
     RustOutgoingTcp,
+    RustOutgoingFilter,
     RustIssue1123,
     RustIssue1054,
     RustIssue1458,
@@ -719,6 +720,11 @@ impl Application {
                 "{}/{}",
                 env!("CARGO_MANIFEST_DIR"),
                 "../../target/debug/outgoing",
+            ),
+            Application::RustOutgoingFilter => format!(
+                "{}/{}",
+                env!("CARGO_MANIFEST_DIR"),
+                "../../target/debug/outgoing_filter",
             ),
             Application::RustDnsResolve => format!(
                 "{}/{}",
@@ -836,6 +842,7 @@ impl Application {
             | Application::RustIssue1458PortNot53
             | Application::RustIssue1776
             | Application::RustIssue1776PortNot53
+            | Application::RustOutgoingFilter
             | Application::RustDnsResolve
             | Application::RustRecvFrom
             | Application::RustListenPorts
@@ -900,6 +907,7 @@ impl Application {
             | Application::Go20Dir
             | Application::RustOutgoingUdp
             | Application::RustOutgoingTcp
+            | Application::RustOutgoingFilter
             | Application::RustIssue1458
             | Application::RustIssue1458PortNot53
             | Application::RustIssue1776

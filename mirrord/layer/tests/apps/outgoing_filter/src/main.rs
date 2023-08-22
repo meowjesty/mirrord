@@ -3,7 +3,7 @@ use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 fn main() {
     println!("test outgoing_filter: START");
 
-    let remote_addr = "service.name:7777"
+    let remote_addr = "rust-lang.org:7777"
         .to_socket_addrs()
         .expect("Failed converting service.name into addresses!")
         .find(SocketAddr::is_ipv4)

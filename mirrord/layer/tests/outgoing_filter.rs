@@ -42,7 +42,7 @@ async fn outgoing_filter_remote_hostname_matches(
     let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-    assert_eq!(node, "service.name".to_string());
+    assert_eq!(node, "rust-lang.org".to_string());
 
     connection
         .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(
@@ -58,7 +58,7 @@ async fn outgoing_filter_remote_hostname_matches(
     let ClientMessage::GetAddrInfoRequest(GetAddrInfoRequest { node}) = msg else {
             panic!("Invalid message received from layer: {msg:?}");
         };
-    assert_eq!(node, "service.name".to_string());
+    assert_eq!(node, "rust-lang.org".to_string());
 
     connection
         .send(DaemonMessage::GetAddrInfoResponse(GetAddrInfoResponse(Ok(

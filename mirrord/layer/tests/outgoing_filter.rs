@@ -36,11 +36,16 @@ async fn outgoing_filter_remote_hostname_matches(
     let (mut test_process, mut layer_connection) = Application::RustOutgoingFilter
         .start_process_with_layer(dylib_path, vec![], config)
         .await;
-    // let mut connection = layer_connection.codec;
+
+    // layer_connection
+    //     .expect_xstat(Some("/etc/resolv.conf".into()), None)
+    //     .await;
+    let msg = layer_connection.consume_xstats().await;
 
     // Should we call `codec.next` or was it called outside already?
     // open file
-    let open_file_request = layer_connection.codec.next().await.unwrap().unwrap();
+    // let open_file_request = layer_connection.codec.next().await.unwrap().unwrap();
+    let open_file_request = msg;
 
     assert_eq!(
         open_file_request,

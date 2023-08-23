@@ -932,7 +932,7 @@
 ) -&gt; ssize_t {
     <span class="kw">let </span>recvmsg_result = FN_RECVMSG(sockfd, message_header, flags);
 
-    <span class="kw">if </span>recvmsg_result == -<span class="number">1 </span>&amp;&amp; errno::errno() != errno::Errno(libc::EAGAIN) {
+    <span class="kw">if </span>recvmsg_result == -<span class="number">1 </span>{
         recvmsg_result
     } <span class="kw">else </span>{
         <span class="comment">// Fills the address, similar to how `recv_from` works.

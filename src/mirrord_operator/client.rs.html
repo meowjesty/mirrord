@@ -427,10 +427,20 @@
 <a href="#427" id="427">427</a>
 <a href="#428" id="428">428</a>
 <a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>base64::{engine::general_purpose, Engine <span class="kw">as _</span>};
 <span class="kw">use </span>futures::{SinkExt, StreamExt};
 <span class="kw">use </span>http::request::Request;
 <span class="kw">use </span>kube::{error::ErrorResponse, Api, Client, Resource};
+<span class="kw">use </span>mirrord_analytics::{AnalyticsHash, AnalyticsOperatorProperties, AnalyticsReporter};
 <span class="kw">use </span>mirrord_auth::{
     certificate::Certificate, credential_store::CredentialStoreSync, error::AuthenticationError,
 };
@@ -453,7 +463,6 @@
 <span class="kw">use </span><span class="kw">crate</span>::crd::{MirrordOperatorCrd, OperatorFeatures, TargetCrd, OPERATOR_STATUS_NAME};
 
 <span class="kw">static </span>CONNECTION_CHANNEL_SIZE: usize = <span class="number">1000</span>;
-<span class="kw">const </span>MIRRORD_OPERATOR_SESSION: <span class="kw-2">&amp;</span>str = <span class="string">&quot;MIRRORD_OPERATOR_SESSION&quot;</span>;
 
 <span class="attr">#[derive(Debug, Error)]
 </span><span class="kw">pub enum </span>OperatorApiError {
@@ -477,8 +486,6 @@
     </span>Authentication(<span class="attr">#[from] </span>AuthenticationError),
     <span class="attr">#[error(<span class="string">&quot;Can&#39;t start proccess because other locks exist on target&quot;</span>)]
     </span>ConcurrentStealAbort,
-    <span class="attr">#[error(<span class="string">&quot;Invalid operator session - this is a bug, please report it. value: `{0}` err: `{1}`&quot;</span>)]
-    </span>InvalidOperatorSession(String, serde_json::Error),
 }
 
 <span class="kw">type </span><span class="prelude-ty">Result</span>&lt;T, E = OperatorApiError&gt; = std::result::Result&lt;T, E&gt;;
@@ -511,22 +518,6 @@
             protocol_version,
         }
     }
-
-    <span class="doccomment">/// Returns environment variable holding the information
-    </span><span class="kw">pub const fn </span>env_key() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
-        MIRRORD_OPERATOR_SESSION
-    }
-
-    <span class="doccomment">/// Loads the information from environment variables
-    </span><span class="kw">pub fn </span>from_env() -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;&gt; {
-        std::env::var(<span class="self">Self</span>::env_key())
-            .ok()
-            .map(|val| {
-                serde_json::from_str(<span class="kw-2">&amp;</span>val)
-                    .map_err(|e| OperatorApiError::InvalidOperatorSession(val, e))
-            })
-            .transpose()
-    }
 }
 
 <span class="kw">pub struct </span>OperatorApi {
@@ -543,6 +534,7 @@
     </span><span class="kw">pub async fn </span>create_session&lt;P&gt;(
         config: <span class="kw-2">&amp;</span>LayerConfig,
         progress: <span class="kw-2">&amp;</span>P,
+        analytics: <span class="kw-2">&amp;mut </span>AnalyticsReporter,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;
         <span class="prelude-ty">Option</span>&lt;(
             mpsc::Sender&lt;ClientMessage&gt;,
@@ -555,43 +547,56 @@
     {
         <span class="kw">let </span>operator_api = OperatorApi::new(config).<span class="kw">await</span><span class="question-mark">?</span>;
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = operator_api.fetch_target().<span class="kw">await</span><span class="question-mark">? </span>{
-            <span class="kw">let </span>status = operator_api.get_status().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>status = operator_api.get_status().<span class="kw">await</span><span class="question-mark">?</span>;
 
-            <span class="kw">let </span><span class="kw-2">mut </span>version_progress = progress.subtask(<span class="string">&quot;comparing versions&quot;</span>);
-            <span class="kw">let </span>operator_version = Version::parse(<span class="kw-2">&amp;</span>status.spec.operator_version).unwrap(); <span class="comment">// TODO: Remove unwrap
+        <span class="kw">let </span>client_certificate =
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(credential_name) = status.spec.license.fingerprint.as_ref() {
+                CredentialStoreSync::get_client_certificate::&lt;MirrordOperatorCrd&gt;(
+                    <span class="kw-2">&amp;</span>operator_api.client,
+                    credential_name.to_string(),
+                )
+                .<span class="kw">await
+                </span>.map_err(|err| <span class="macro">debug!</span>(<span class="string">&quot;CredentialStore error: {err}&quot;</span>))
+                .ok()
+            } <span class="kw">else </span>{
+                <span class="prelude-val">None
+            </span>};
 
-            // This is printed multiple times when the local process forks. Can be solved by e.g.
-            // propagating an env var, don&#39;t think it&#39;s worth the extra complexity though
-            </span><span class="kw">let </span>mirrord_version = Version::parse(<span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>)).unwrap();
-            <span class="kw">if </span>operator_version &gt; mirrord_version {
-                <span class="comment">// we make two sub tasks since it looks best this way
-                </span>version_progress.warning(
+        analytics.set_operator_properties(AnalyticsOperatorProperties {
+            client_hash: client_certificate
+                .as_ref()
+                .and_then(|certificate| certificate.sha256_fingerprint().ok())
+                .map(|fingerprint| AnalyticsHash::from_bytes(fingerprint.as_ref())),
+            license_hash: status
+                .spec
+                .license
+                .fingerprint
+                .as_deref()
+                .map(AnalyticsHash::from_base64),
+        });
+
+        <span class="kw">let </span><span class="kw-2">mut </span>version_progress = progress.subtask(<span class="string">&quot;comparing versions&quot;</span>);
+        <span class="kw">let </span>operator_version = Version::parse(<span class="kw-2">&amp;</span>status.spec.operator_version).unwrap(); <span class="comment">// TODO: Remove unwrap
+
+        // This is printed multiple times when the local process forks. Can be solved by e.g.
+        // propagating an env var, don&#39;t think it&#39;s worth the extra complexity though
+        </span><span class="kw">let </span>mirrord_version = Version::parse(<span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>)).unwrap();
+        <span class="kw">if </span>operator_version &gt; mirrord_version {
+            <span class="comment">// we make two sub tasks since it looks best this way
+            </span>version_progress.warning(
                     <span class="kw-2">&amp;</span><span class="macro">format!</span>(
                         <span class="string">&quot;Your mirrord plugin/CLI version {} does not match the operator version {}. This can lead to unforeseen issues.&quot;</span>,
                         mirrord_version,
                         operator_version));
-                version_progress.success(<span class="prelude-val">None</span>);
-                version_progress = progress.subtask(<span class="string">&quot;comparing versions&quot;</span>);
-                version_progress.warning(
-                    <span class="string">&quot;Consider updating your mirrord plugin/CLI to match the operator version.&quot;</span>,
-                );
-            }
             version_progress.success(<span class="prelude-val">None</span>);
+            version_progress = progress.subtask(<span class="string">&quot;comparing versions&quot;</span>);
+            version_progress.warning(
+                <span class="string">&quot;Consider updating your mirrord plugin/CLI to match the operator version.&quot;</span>,
+            );
+        }
+        version_progress.success(<span class="prelude-val">None</span>);
 
-            <span class="kw">let </span>client_certificate =
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(credential_name) = status.spec.license.fingerprint.as_ref() {
-                    CredentialStoreSync::get_client_certificate::&lt;MirrordOperatorCrd&gt;(
-                        <span class="kw-2">&amp;</span>operator_api.client,
-                        credential_name.to_string(),
-                    )
-                    .<span class="kw">await
-                    </span>.map_err(|err| <span class="macro">debug!</span>(<span class="string">&quot;CredentialStore error: {err}&quot;</span>))
-                    .ok()
-                } <span class="kw">else </span>{
-                    <span class="prelude-val">None
-                </span>};
-
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = operator_api.fetch_target().<span class="kw">await</span><span class="question-mark">? </span>{
             <span class="kw">let </span>operator_session_information = OperatorSessionInformation::new(
                 client_certificate,
                 target,
@@ -617,7 +622,20 @@
     </span><span class="kw">pub async fn </span>connect(
         config: <span class="kw-2">&amp;</span>LayerConfig,
         session_information: <span class="kw-2">&amp;</span>OperatorSessionInformation,
+        analytics: <span class="kw-2">&amp;mut </span>AnalyticsReporter,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(mpsc::Sender&lt;ClientMessage&gt;, mpsc::Receiver&lt;DaemonMessage&gt;)&gt; {
+        analytics.set_operator_properties(AnalyticsOperatorProperties {
+            client_hash: session_information
+                .client_certificate
+                .as_ref()
+                .and_then(|certificate| certificate.sha256_fingerprint().ok())
+                .map(|fingerprint| AnalyticsHash::from_bytes(fingerprint.as_ref())),
+            license_hash: session_information
+                .fingerprint
+                .as_deref()
+                .map(AnalyticsHash::from_base64),
+        });
+
         OperatorApi::new(config)
             .<span class="kw">await</span><span class="question-mark">?
             </span>.connect_target(session_information)

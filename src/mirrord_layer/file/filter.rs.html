@@ -660,7 +660,7 @@
         <span class="kw">return </span>Default::default();
     };
 
-    <span class="kw">let </span>home_clean = home.trim_end_matches(<span class="string">&#39;/&#39;</span>);
+    <span class="kw">let </span>home_clean = regex::escape(home.trim_end_matches(<span class="string">&#39;/&#39;</span>));
 
     <span class="kw">let </span>patterns = [<span class="string">r&quot;\.aws&quot;</span>, <span class="string">r&quot;\.config/gcloud&quot;</span>, <span class="string">r&quot;\.kube&quot;</span>, <span class="string">r&quot;\.azure&quot;</span>]
         .into_iter()

@@ -368,7 +368,7 @@
 }
 
 <span class="attr">#[enum_dispatch(ContainerRuntime)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>Container {
     Docker(DockerContainer),
     Containerd(ContainerdContainer),
@@ -400,7 +400,7 @@
     }
 }
 
-<span class="attr">#[derive(Debug)]
+<span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>DockerContainer {
     container_id: String,
     client: Docker,
@@ -466,7 +466,7 @@
     }
 }
 
-<span class="attr">#[derive(Debug)]
+<span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>ContainerdContainer {
     container_id: String,
 }

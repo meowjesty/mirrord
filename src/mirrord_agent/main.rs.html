@@ -743,6 +743,12 @@
 <a href="#743" id="743">743</a>
 <a href="#744" id="744">744</a>
 <a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
 </pre></div><pre class="rust"><code><span class="attr">#![feature(result_option_inspect)]
 #![feature(hash_drain_filter)]
 #![feature(let_chains)]
@@ -793,7 +799,7 @@
     steal::{
         connection::TcpConnectionStealer,
         ip_tables::{
-            SafeIpTables, IPTABLE_MESH, IPTABLE_MESH_ENV, IPTABLE_PREROUTING,
+            IPTablesWrapper, SafeIpTables, IPTABLE_MESH, IPTABLE_MESH_ENV, IPTABLE_PREROUTING,
             IPTABLE_PREROUTING_ENV, IPTABLE_STANDARD, IPTABLE_STANDARD_ENV,
         },
         StealerCommand,
@@ -1406,7 +1412,10 @@
 <span class="kw">async fn </span>clear_iptable_chain() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>ipt = iptables::new(<span class="bool-val">false</span>).unwrap();
 
-    SafeIpTables::load(ipt, <span class="bool-val">false</span>).<span class="kw">await</span><span class="question-mark">?</span>.cleanup().<span class="kw">await</span><span class="question-mark">?</span>;
+    SafeIpTables::load(IPTablesWrapper::from(ipt), <span class="bool-val">false</span>)
+        .<span class="kw">await</span><span class="question-mark">?
+        </span>.cleanup()
+        .<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="prelude-val">Ok</span>(())
 }
@@ -1449,7 +1458,7 @@
     result
 }
 
-<span class="attr">#[tokio::main]
+<span class="attr">#[tokio::main(flavor = <span class="string">&quot;current_thread&quot;</span>)]
 </span><span class="kw">async fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     tracing_subscriber::registry()
         .with(
@@ -1473,6 +1482,9 @@
     </span>} <span class="kw">else </span>{
         start_iptable_guard().<span class="kw">await
     </span>};
+
+    <span class="comment">// wait for background tasks to finish
+    </span>tokio::time::sleep(std::time::Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
 
     <span class="kw">match </span>agent_result {
         <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {

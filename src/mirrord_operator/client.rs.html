@@ -436,6 +436,12 @@
 <a href="#436" id="436">436</a>
 <a href="#437" id="437">437</a>
 <a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>base64::{engine::general_purpose, Engine <span class="kw">as _</span>};
 <span class="kw">use </span>futures::{SinkExt, StreamExt};
 <span class="kw">use </span>http::request::Request;
@@ -547,7 +553,13 @@
     {
         <span class="kw">let </span>operator_api = OperatorApi::new(config).<span class="kw">await</span><span class="question-mark">?</span>;
 
-        <span class="kw">let </span>status = operator_api.get_status().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>status = <span class="kw">match </span>operator_api.get_status().<span class="kw">await</span>.transpose()<span class="question-mark">? </span>{
+            <span class="prelude-val">Some</span>(status) =&gt; status,
+            <span class="prelude-val">None </span>=&gt; {
+                <span class="comment">// No operator found
+                </span><span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+            }
+        };
 
         <span class="kw">let </span>client_certificate =
             <span class="kw">if let </span><span class="prelude-val">Some</span>(credential_name) = status.spec.license.fingerprint.as_ref() {
@@ -675,12 +687,12 @@
         })
     }
 
-    <span class="kw">async fn </span>get_status(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;MirrordOperatorCrd&gt; {
-        <span class="self">self</span>.version_api
-            .get(OPERATOR_STATUS_NAME)
-            .<span class="kw">await
-            </span>.map_err(KubeApiError::KubeError)
-            .map_err(OperatorApiError::KubeApiError)
+    <span class="kw">async fn </span>get_status(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Result</span>&lt;MirrordOperatorCrd&gt;&gt; {
+        <span class="kw">match </span><span class="self">self</span>.version_api.get(OPERATOR_STATUS_NAME).<span class="kw">await </span>{
+            <span class="prelude-val">Ok</span>(status) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(status)),
+            <span class="prelude-val">Err</span>(kube::Error::Api(ErrorResponse { code: <span class="number">404</span>, .. })) =&gt; <span class="prelude-val">None</span>,
+            <span class="prelude-val">Err</span>(err) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(OperatorApiError::from(KubeApiError::from(err)))),
+        }
     }
 
     <span class="kw">async fn </span>fetch_target(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;TargetCrd&gt;&gt; {

@@ -230,6 +230,9 @@
 <a href="#230" id="230">230</a>
 <a href="#231" id="231">231</a>
 <a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::path::PathBuf;
 
 <span class="kw">use </span>miette::Diagnostic;
@@ -461,5 +464,8 @@
         <span class="string">r#&quot;This is a bug. Please report it in our Discord or GitHub repository. {GENERAL_HELP}&quot;#
     </span>))]
     </span>RuntimeError(std::io::Error),
+    <span class="attr">#[error(<span class="string">&quot;Failed to get last operator version err: `{0}`&quot;</span>)]
+    #[diagnostic(help(<span class="string">&quot;Please check internet connection.{GENERAL_HELP}&quot;</span>))]
+    </span>OperatorVersionCheckError(reqwest::Error),
 }
 </code></pre></div></section></main></body></html>

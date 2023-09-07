@@ -1143,6 +1143,16 @@
 <a href="#1143" id="1143">1143</a>
 <a href="#1144" id="1144">1144</a>
 <a href="#1145" id="1145">1145</a>
+<a href="#1146" id="1146">1146</a>
+<a href="#1147" id="1147">1147</a>
+<a href="#1148" id="1148">1148</a>
+<a href="#1149" id="1149">1149</a>
+<a href="#1150" id="1150">1150</a>
+<a href="#1151" id="1151">1151</a>
+<a href="#1152" id="1152">1152</a>
+<a href="#1153" id="1153">1153</a>
+<a href="#1154" id="1154">1154</a>
+<a href="#1155" id="1155">1155</a>
 </pre></div><pre class="rust"><code><span class="attr">#[cfg(target_os = <span class="string">&quot;linux&quot;</span>)]
 </span><span class="kw">use </span>core::ffi::{c_size_t, c_ssize_t};
 <span class="doccomment">/// FFI functions that override the `libc` calls (see `file` module documentation on how to
@@ -1156,10 +1166,12 @@
 </span><span class="kw">use </span>errno::{set_errno, Errno};
 <span class="kw">use </span>libc::{
     <span class="self">self</span>, c_char, c_int, c_void, dirent, off_t, size_t, ssize_t, stat, statfs, AT_EACCESS,
-    AT_FDCWD, DIR, O_DIRECTORY, O_RDONLY,
+    AT_FDCWD, DIR,
 };
 <span class="attr">#[cfg(target_os = <span class="string">&quot;linux&quot;</span>)]
 </span><span class="kw">use </span>libc::{dirent64, stat64, EBADF, EINVAL, ENOENT, ENOTDIR};
+<span class="attr">#[cfg(not(all(target_os = <span class="string">&quot;macos&quot;</span>, target_arch = <span class="string">&quot;aarch64&quot;</span>)))]
+</span><span class="kw">use </span>libc::{O_DIRECTORY, O_RDONLY};
 <span class="kw">use </span>mirrord_layer_macro::{hook_fn, hook_guard_fn};
 <span class="kw">use </span>mirrord_protocol::file::{
     DirEntryInternal, FsMetadataInternal, MetadataInternal, ReadFileResponse, WriteFileResponse,
@@ -1172,12 +1184,13 @@
 </span><span class="kw">use </span>tracing::{error, info, warn};
 
 <span class="kw">use super</span>::{ops::<span class="kw-2">*</span>, OpenOptionsInternalExt};
+<span class="attr">#[cfg(not(all(target_os = <span class="string">&quot;macos&quot;</span>, target_arch = <span class="string">&quot;aarch64&quot;</span>)))]
+</span><span class="kw">use </span><span class="kw">crate</span>::close_layer_fd;
 <span class="attr">#[cfg(target_os = <span class="string">&quot;macos&quot;</span>)]
 </span><span class="kw">use </span><span class="kw">crate</span>::detour::Bypass;
 <span class="attr">#[cfg(target_os = <span class="string">&quot;linux&quot;</span>)]
 </span><span class="kw">use </span><span class="kw">crate</span>::error::HookError::ResponseError;
 <span class="kw">use crate</span>::{
-    close_layer_fd,
     common::CheckedInto,
     detour::{Detour, DetourGuard},
     error::HookError,
@@ -1287,7 +1300,8 @@
 ///
 /// Opens the directory with `read` permission using the [`open_logic`] flow, then calls
 /// [`fdopendir`] to convert the [`RawFd`] into a `*DIR` stream (which we treat as `usize`).
-</span><span class="attr">#[hook_guard_fn]
+</span><span class="attr">#[cfg(not(all(target_os = <span class="string">&quot;macos&quot;</span>, target_arch = <span class="string">&quot;aarch64&quot;</span>)))]
+#[hook_guard_fn]
 </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">unsafe extern </span><span class="string">&quot;C&quot; </span><span class="kw">fn </span>opendir_detour(raw_filename: <span class="kw-2">*const </span>c_char) -&gt; usize {
     open_logic(raw_filename, O_RDONLY, O_DIRECTORY)
         .and_then(|fd| <span class="kw">match </span>fdopendir(fd) {
@@ -2225,7 +2239,13 @@
             FnReaddir64_r,
             FN_READDIR64_R
         );
-        <span class="macro">replace!</span>(
+        <span class="comment">// aarch + macOS hooks fail
+        // because macOs internally calls this with pointer authentication
+        // and we don&#39;t compile to arm64e yet, so it breaks.
+        // but it seems we&#39;ll be able to compile to arm64e soon.
+        // https://github.com/rust-lang/rust/pull/115526
+        </span><span class="attr">#[cfg(target_os = <span class="string">&quot;linux&quot;</span>)]
+        </span><span class="macro">replace!</span>(
             hook_manager,
             <span class="string">&quot;opendir&quot;</span>,
             opendir_detour,

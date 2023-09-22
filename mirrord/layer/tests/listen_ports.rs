@@ -41,14 +41,18 @@ async fn listen_ports(
         ClientMessage::TcpSteal(LayerTcpSteal::PortSubscribe(StealType::All(80)))
     );
 
-    TcpStream::connect("127.0.0.1:51222").await.unwrap();
+    TcpStream::connect("127.0.0.1:51222")
+        .await
+        .expect("Failed on port 51222");
 
     assert_matches!(
         layer_connection.codec.next().await.unwrap().unwrap(),
         ClientMessage::TcpSteal(LayerTcpSteal::PortSubscribe(StealType::All(40000)))
     );
 
-    TcpStream::connect("127.0.0.1:40000").await.unwrap();
+    TcpStream::connect("127.0.0.1:40000")
+        .await
+        .expect("Failed on port 40000");
 
     loop {
         match layer_connection.codec.next().await {

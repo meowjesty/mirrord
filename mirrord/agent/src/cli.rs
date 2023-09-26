@@ -20,7 +20,7 @@ pub struct Args {
 
     /// Interface to use
     #[arg(short = 'i', long)]
-    pub network_interface: Option<String>,
+    pub network_interface: Option<Vec<String>>,
 
     /// Pause the target container while clients are connected.
     #[arg(short = 'p', long, default_value_t = false)]

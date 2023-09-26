@@ -6,6 +6,7 @@ use std::{
 };
 
 use fancy_regex::Regex;
+use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use mirrord_protocol::{
     tcp::{DaemonTcp, LayerTcp, NewTcpConnection, TcpClose, TcpData},
     ConnectionId, Port,
@@ -114,7 +115,7 @@ fn is_closed_connection(flags: u16) -> bool {
 /// Used when no `user_interface` is specified in [`prepare_sniffer`] to prevent mirrord from
 /// defaulting to the wrong network interface (`eth0`), as sometimes the user's machine doesn't have
 /// it available (i.e. their default network is `enp2s0`).
-#[tracing::instrument(level = "trace")]
+#[tracing::instrument(level = "trace", ret)]
 async fn resolve_interface() -> Result<Option<String>, AgentError> {
     // Connect to a remote address so we can later get the default network interface.
     let temporary_socket = UdpSocket::bind("0.0.0.0:0").await?;
@@ -139,30 +140,41 @@ async fn resolve_interface() -> Result<Option<String>, AgentError> {
 // And to make matters worse, the error reported back to the user is the very generic:
 // "mirrord-layer received an unexpected response from the agent pod!"
 #[tracing::instrument(level = "trace")]
-async fn prepare_sniffer(network_interface: Option<String>) -> Result<RawCapture, AgentError> {
+async fn prepare_sniffer(
+    network_interface: Option<Vec<String>>,
+) -> Result<Vec<RawCapture>, AgentError> {
     // Priority is whatever the user set as an option to mirrord, otherwise we try to get the
     // appropriate interface.
-    let interface = if let Some(network_interface) = network_interface {
+    // TODO(alex) [mid] 2023-09-26: Check we're resolving the correct iface.
+    let interfaces = if let Some(network_interface) = network_interface {
         network_interface
     } else {
-        resolve_interface()
-            .await?
-            .unwrap_or_else(|| "eth0".to_string())
+        vec![
+            resolve_interface()
+                .await?
+                .unwrap_or_else(|| "eth0".to_string()),
+            "lo".to_string(),
+        ]
     };
 
-    trace!("Using {interface:#?} interface.");
-    // let capture = RawCapture::from_interface_name(&interface)?;
-    let capture = RawCapture::from_interface_name(&"lo")?;
+    trace!("Using {interfaces:#?} interfaces.");
+    let captures = interfaces
+        .into_iter()
+        .map(|interface| RawCapture::from_interface_name(&interface))
+        .collect::<Result<Vec<_>, _>>()?;
+
     // We start with a BPF that drops everything so we won't receive *EVERYTHING*
     // as we don't know what the layer will ask us to listen for, so this is essentially setting
     // it to none
     // we ofc could've done this when a layer connected, but I (A.H) thought it'd make more sense
     // to have this shared among layers (potentially, in the future) - fme.
-    capture.set_filter(rawsocket::filter::build_drop_always())?;
-    capture
-        .ignore_outgoing()
-        .map_err(AgentError::PacketIgnoreOutgoing)?;
-    Ok(capture)
+    for capture in captures.iter() {
+        capture.set_filter(rawsocket::filter::build_drop_always())?;
+        capture
+            .ignore_outgoing()
+            .map_err(AgentError::PacketIgnoreOutgoing)?;
+    }
+    Ok(captures)
 }
 
 #[derive(Debug)]
@@ -316,7 +328,7 @@ pub(crate) struct TcpConnectionSniffer {
     port_subscriptions: Subscriptions<Port, ClientId>,
     receiver: Receiver<SnifferCommand>,
     client_senders: HashMap<ClientId, Sender<DaemonTcp>>,
-    raw_capture: RawCapture,
+    raw_captures: Vec<RawCapture>,
     sessions: TCPSessionMap,
     //todo: impl drop for index allocator and connection id..
     connection_id_to_tcp_identifier: HashMap<ConnectionId, TcpSessionIdentifier>,
@@ -336,8 +348,11 @@ impl TcpConnectionSniffer {
                         self.handle_command(command).await?;
                     } else { break; }
                 },
-                packet = self.raw_capture.next() => {
-                    self.handle_packet(packet?).await?;
+                packets = FuturesUnordered::from_iter(self.raw_captures.iter().map(RawCapture::next))
+                    .collect::<Vec<_>>() => {
+                    for packet in packets {
+                        self.handle_packet(packet?).await?;
+                    }
                 }
                 _ = cancel_token.cancelled() => {
                     break;
@@ -357,13 +372,13 @@ impl TcpConnectionSniffer {
     #[tracing::instrument(level = "trace")]
     pub async fn new(
         receiver: Receiver<SnifferCommand>,
-        network_interface: Option<String>,
+        network_interfaces: Option<Vec<String>>,
     ) -> Result<Self, AgentError> {
-        let raw_capture = prepare_sniffer(network_interface).await?;
+        let raw_capture = prepare_sniffer(network_interfaces).await?;
 
         Ok(Self {
             receiver,
-            raw_capture,
+            raw_captures,
             port_subscriptions: Default::default(),
             client_senders: HashMap::new(),
             sessions: TCPSessionMap::new(),
@@ -409,10 +424,10 @@ impl TcpConnectionSniffer {
 
         if ports.is_empty() {
             trace!("Empty ports, setting dummy bpf");
-            self.raw_capture
+            self.raw_captures
                 .set_filter(rawsocket::filter::build_drop_always())?
         } else {
-            self.raw_capture
+            self.raw_captures
                 .set_filter(rawsocket::filter::build_tcp_port_filter(&ports))?
         };
         Ok(())
@@ -515,19 +530,9 @@ impl TcpConnectionSniffer {
             || matches!(HttpVersion::new(bytes), HttpVersion::V1 | HttpVersion::V2)
     }
 
-    const HTTP_1_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new("(?i)(get|head|post|put|delete|connect|options|trace|patch) ")
-            .expect("Failed initializing HTTP detection regex for sniffer!")
-    });
-
-    const HTTP_2_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new("(?i)PRI * HTTP/2.0")
-            .expect("Failed initializing HTTP detection regex for sniffer!")
-    });
-
     #[tracing::instrument(level = "trace", ret, skip(self, eth_packet), fields(bytes = %eth_packet.len()))]
     async fn handle_packet(&mut self, eth_packet: Vec<u8>) -> Result<(), AgentError> {
-        let (identifier, mut tcp_packet) = match get_tcp_packet(eth_packet) {
+        let (identifier, tcp_packet) = match get_tcp_packet(eth_packet) {
             Some(res) => res,
             None => return Ok(()),
         };
@@ -559,33 +564,6 @@ impl TcpConnectionSniffer {
                 if !is_client_packet {
                     return Ok(());
                 }
-
-                info!("it's probably HTTP");
-                // let packet_offset = match HttpVersion::new(&tcp_packet.bytes) {
-                //     HttpVersion::V1 => {
-                //         let contents = String::from_utf8_lossy(&tcp_packet.bytes);
-                //         Self::HTTP_1_REGEX
-                //             .find(&contents)
-                //             .ok()
-                //             .flatten()
-                //             .map(|range| range.start())
-                //             .unwrap_or_default()
-                //     }
-                //     HttpVersion::V2 => {
-                //         let contents = String::from_utf8_lossy(&tcp_packet.bytes);
-                //         Self::HTTP_2_REGEX
-                //             .find(&contents)
-                //             .ok()
-                //             .flatten()
-                //             .map(|range| range.start())
-                //             .unwrap_or_default()
-                //     }
-                //     HttpVersion::NotHttp => 0,
-                // };
-                // info!("with offset {packet_offset:?}");
-
-                // tcp_packet.bytes.rotate_left(packet_offset);
-                // tcp_packet.bytes.truncate(packet_offset);
 
                 let id = match self.index_allocator.next_index() {
                     Some(id) => id,

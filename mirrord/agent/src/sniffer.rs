@@ -2,8 +2,10 @@ use std::{
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::LazyLock,
 };
 
+use fancy_regex::Regex;
 use mirrord_protocol::{
     tcp::{DaemonTcp, LayerTcp, NewTcpConnection, TcpClose, TcpData},
     ConnectionId, Port,
@@ -23,7 +25,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     error::AgentError,
@@ -149,7 +151,8 @@ async fn prepare_sniffer(network_interface: Option<String>) -> Result<RawCapture
     };
 
     trace!("Using {interface:#?} interface.");
-    let capture = RawCapture::from_interface_name(&interface)?;
+    // let capture = RawCapture::from_interface_name(&interface)?;
+    let capture = RawCapture::from_interface_name(&"lo")?;
     // We start with a BPF that drops everything so we won't receive *EVERYTHING*
     // as we don't know what the layer will ask us to listen for, so this is essentially setting
     // it to none
@@ -507,13 +510,24 @@ impl TcpConnectionSniffer {
     /// tl;dr: checks packet flags, or if it's an HTTP packet, then begins a new sniffing session.
     #[tracing::instrument(level = "trace", ret, skip(bytes))]
     fn treat_as_new_session(tcp_flags: u16, bytes: &[u8]) -> bool {
+        debug!("\ngot bytes\n{:?}\n", String::from_utf8_lossy(bytes));
         is_new_connection(tcp_flags)
             || matches!(HttpVersion::new(bytes), HttpVersion::V1 | HttpVersion::V2)
     }
 
+    const HTTP_1_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new("(?i)(get|head|post|put|delete|connect|options|trace|patch) ")
+            .expect("Failed initializing HTTP detection regex for sniffer!")
+    });
+
+    const HTTP_2_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new("(?i)PRI * HTTP/2.0")
+            .expect("Failed initializing HTTP detection regex for sniffer!")
+    });
+
     #[tracing::instrument(level = "trace", ret, skip(self, eth_packet), fields(bytes = %eth_packet.len()))]
     async fn handle_packet(&mut self, eth_packet: Vec<u8>) -> Result<(), AgentError> {
-        let (identifier, tcp_packet) = match get_tcp_packet(eth_packet) {
+        let (identifier, mut tcp_packet) = match get_tcp_packet(eth_packet) {
             Some(res) => res,
             None => return Ok(()),
         };
@@ -541,9 +555,37 @@ impl TcpConnectionSniffer {
                     return Ok(());
                 }
 
+                debug!("is_client_packet {is_client_packet:?}");
                 if !is_client_packet {
                     return Ok(());
                 }
+
+                info!("it's probably HTTP");
+                // let packet_offset = match HttpVersion::new(&tcp_packet.bytes) {
+                //     HttpVersion::V1 => {
+                //         let contents = String::from_utf8_lossy(&tcp_packet.bytes);
+                //         Self::HTTP_1_REGEX
+                //             .find(&contents)
+                //             .ok()
+                //             .flatten()
+                //             .map(|range| range.start())
+                //             .unwrap_or_default()
+                //     }
+                //     HttpVersion::V2 => {
+                //         let contents = String::from_utf8_lossy(&tcp_packet.bytes);
+                //         Self::HTTP_2_REGEX
+                //             .find(&contents)
+                //             .ok()
+                //             .flatten()
+                //             .map(|range| range.start())
+                //             .unwrap_or_default()
+                //     }
+                //     HttpVersion::NotHttp => 0,
+                // };
+                // info!("with offset {packet_offset:?}");
+
+                // tcp_packet.bytes.rotate_left(packet_offset);
+                // tcp_packet.bytes.truncate(packet_offset);
 
                 let id = match self.index_allocator.next_index() {
                     Some(id) => id,

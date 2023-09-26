@@ -6,7 +6,7 @@ use mirrord_config_derive::MirrordConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::config::source::MirrordConfigSource;
+use crate::{config::source::MirrordConfigSource, util::VecOrSingle};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -176,7 +176,7 @@ pub struct AgentConfig {
     /// The default behavior is try to access the internet and use that interface. If that fails
     /// it uses `eth0`.
     #[config(env = "MIRRORD_AGENT_NETWORK_INTERFACE")]
-    pub network_interface: Option<String>,
+    pub network_interface: Option<VecOrSingle<String>>,
 
     /// ### agent.flush_connections {#agent-flush_connections}
     ///

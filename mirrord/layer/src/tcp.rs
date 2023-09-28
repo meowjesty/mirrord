@@ -85,6 +85,7 @@ pub(crate) trait TcpHandler<const IS_STEAL: bool> {
     }
 
     /// Handle a potential [`LayerError::NewConnectionAfterSocketClose`] error.
+    #[tracing::instrument(level = "debug", ret)]
     fn check_connection_handling_result(res: Result<(), LayerError>) -> Result<(), LayerError> {
         if let Err(LayerError::NewConnectionAfterSocketClose(connection_id)) = res {
             // This can happen:

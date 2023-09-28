@@ -3,7 +3,7 @@
 //! The layer will connect to the internal proxy to communicate with the agent.
 use std::net::SocketAddr;
 
-use futures::{SinkExt, StreamExt};
+use futures::{stream::Peek, SinkExt, StreamExt};
 use mirrord_protocol::{ClientCodec, ClientMessage, DaemonMessage, LogLevel};
 use tokio::{
     net::TcpStream,
@@ -85,6 +85,7 @@ fn wrap_raw_connection(
                             }
                         },
                         Some(Ok(msg)) => {
+                            tracing::debug!("new message {:#?}", msg);
                             if let Err(fail) = daemon_out_tx.send(msg).await {
                                 error!("DaemonMessage dropped: {:#?}", fail);
 

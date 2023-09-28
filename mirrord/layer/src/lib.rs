@@ -718,7 +718,7 @@ impl Layer {
     /// ### [`DaemonMessage::LogMessage`]
     ///
     /// This message is handled in protocol level `wrap_raw_connection`.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_daemon_message(&mut self, daemon_message: DaemonMessage) -> Result<()> {
         match daemon_message {
             DaemonMessage::Tcp(message) => {

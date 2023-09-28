@@ -121,9 +121,12 @@ pub(crate) enum HttpVersion {
 impl HttpVersion {
     /// Checks if `buffer` contains a valid HTTP/1.x request, or if it could be an HTTP/2 request by
     /// comparing it with a slice of [`H2_PREFACE`].
-    #[tracing::instrument(level = "trace", skip(buffer))]
+    #[tracing::instrument(level = "debug", ret, skip(buffer))]
     pub(crate) fn new(buffer: &[u8]) -> Self {
         let mut empty_headers = [httparse::EMPTY_HEADER; 0];
+
+        let db = buffer.iter().copied().take(32).collect::<Vec<_>>();
+        tracing::debug!("http check `{}`", String::from_utf8_lossy(&db));
 
         if buffer.len() < MINIMAL_HEADER_SIZE {
             Self::NotHttp

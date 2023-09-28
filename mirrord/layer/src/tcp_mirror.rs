@@ -146,14 +146,14 @@ impl TcpHandler<false> for TcpMirrorHandler {
     }
 
     /// Handle New Data messages
-    #[tracing::instrument(level = "trace", skip(self), fields(data = data.connection_id))]
+    #[tracing::instrument(level = "debug", skip(self), fields(data = data.connection_id))]
     async fn handle_new_data(&mut self, data: TcpData) -> Result<()> {
         // TODO: "remove -> op -> insert" pattern here, maybe we could improve the overlying
         // abstraction to use something that has mutable access.
         if let Some(mut connection) = self.connections.take(&data.connection_id) {
             debug!(
-                "handle_new_data -> writing {:#?} bytes to id {:#?}",
-                data.bytes.len(),
+                "handle_new_data -> writing `{:#?}` bytes to id {:#?}",
+                String::from_utf8_lossy(&data.bytes),
                 connection.id
             );
             // TODO: Due to the above, if we fail here this connection is leaked (-agent won't be

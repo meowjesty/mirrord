@@ -2,11 +2,9 @@ use std::{
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::LazyLock,
 };
 
-use fancy_regex::Regex;
-use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, StreamExt};
 use mirrord_protocol::{
     tcp::{DaemonTcp, LayerTcp, NewTcpConnection, TcpClose, TcpData},
     ConnectionId, Port,
@@ -26,7 +24,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{
     error::AgentError,
@@ -150,14 +148,14 @@ async fn prepare_sniffer(
         network_interface
     } else {
         vec![
+            "lo".to_string(),
             resolve_interface()
                 .await?
                 .unwrap_or_else(|| "eth0".to_string()),
-            "lo".to_string(),
         ]
     };
 
-    trace!("Using {interfaces:#?} interfaces.");
+    debug!("Using {interfaces:#?} interfaces.");
     let captures = interfaces
         .into_iter()
         .map(|interface| RawCapture::from_interface_name(&interface))
@@ -374,7 +372,7 @@ impl TcpConnectionSniffer {
         receiver: Receiver<SnifferCommand>,
         network_interfaces: Option<Vec<String>>,
     ) -> Result<Self, AgentError> {
-        let raw_capture = prepare_sniffer(network_interfaces).await?;
+        let raw_captures = prepare_sniffer(network_interfaces).await?;
 
         Ok(Self {
             receiver,
@@ -424,11 +422,13 @@ impl TcpConnectionSniffer {
 
         if ports.is_empty() {
             trace!("Empty ports, setting dummy bpf");
-            self.raw_captures
-                .set_filter(rawsocket::filter::build_drop_always())?
+            for capture in self.raw_captures.iter() {
+                capture.set_filter(rawsocket::filter::build_drop_always())?
+            }
         } else {
-            self.raw_captures
-                .set_filter(rawsocket::filter::build_tcp_port_filter(&ports))?
+            for capture in self.raw_captures.iter() {
+                capture.set_filter(rawsocket::filter::build_tcp_port_filter(&ports))?
+            }
         };
         Ok(())
     }
@@ -523,14 +523,53 @@ impl TcpConnectionSniffer {
     /// detected, then the agent should start mirroring as if it was a new connection.
     ///
     /// tl;dr: checks packet flags, or if it's an HTTP packet, then begins a new sniffing session.
-    #[tracing::instrument(level = "trace", ret, skip(bytes))]
+    #[tracing::instrument(level = "debug", ret, skip(bytes))]
     fn treat_as_new_session(tcp_flags: u16, bytes: &[u8]) -> bool {
         debug!("\ngot bytes\n{:?}\n", String::from_utf8_lossy(bytes));
         is_new_connection(tcp_flags)
             || matches!(HttpVersion::new(bytes), HttpVersion::V1 | HttpVersion::V2)
     }
 
-    #[tracing::instrument(level = "trace", ret, skip(self, eth_packet), fields(bytes = %eth_packet.len()))]
+    // TODO(alex) [high] 2023-09-27: Looks like we cache the data? As after many requests with a
+    // body, sometimes I can't see it being printed by actix, but I see the layer partially handling
+    // stuff, like calling `getpeername` and `accept`. If I then switch back to no body in request
+    // (or change the body), then I still am seeing the old body, as if the requests had been
+    // cached, and we are popping them from a queue of requests, instead of handling the new ones.
+    //
+    // Gotta check a bit more about this in the agent, to make sure that this is an issue in layer
+    // only. Start by seeing if the agent always gets the request as they come, so we should have 1
+    // request to 1 `TcpMessage` somewhere. Print the requests so we can see the body and send a
+    // different body for each request to make it very clear if we're behind or real-time.
+    //
+    // - Testing this with `curl -d "n"` yields:
+    // "1": worked on first try;
+    // "2": did not reach actix, but I can see the request with "\n\n2" body, the connection is
+    // closed too soon, refer to log file (1-2-reach.txt);
+    // "3" and "4": reached, but they were cached?
+    //
+    // - Second run:
+    // "1": worked on first try;
+    // "2": did not reach, no logs;
+    // "3": produced `TcpClose`;
+    // "4": reached, but it produced the "2" logs, also took this chance to wait for a bit, the logs
+    // show `tcp_tunnel` closing, which is different than the `TcpClose` from "2";
+    // "5": did not reach, no logs;
+    // "6": did not reach, no logs;
+    // "7": produced `TcpClose`;
+    // "8": did not reach actix, but I can see the request with "\n\n3" body, the connection is
+    // closed too soon;
+    // "9": did not reach, no logs;
+    // "10": produced `TcpClose`;
+    // "11": did not reach actix, but I can see the request with "\n\n4" body, the connection is
+    // closed too soon;
+    // "12", "13": the usual failures to reach;
+    // "14": reached, but it produced the "5" logs;
+    //
+    // - Only `lo`:
+    //
+    // Capturing only on `lo` works 100%, but the `HttpVersion` is returning `NotHttp` for clearly
+    // http buffers?
+    #[tracing::instrument(level = "debug", ret, skip(self, eth_packet), fields(bytes = %eth_packet.len()))]
     async fn handle_packet(&mut self, eth_packet: Vec<u8>) -> Result<(), AgentError> {
         let (identifier, tcp_packet) = match get_tcp_packet(eth_packet) {
             Some(res) => res,
@@ -540,11 +579,9 @@ impl TcpConnectionSniffer {
         let dest_port = identifier.dest_port;
         let source_port = identifier.source_port;
         let tcp_flags = tcp_packet.flags;
-        trace!(
+        debug!(
             "dest_port {:#?} | source_port {:#?} | tcp_flags {:#?}",
-            dest_port,
-            source_port,
-            tcp_flags
+            dest_port, source_port, tcp_flags
         );
 
         let is_client_packet = self.qualified_port(dest_port);
@@ -554,7 +591,9 @@ impl TcpConnectionSniffer {
             None => {
                 // Performs a check on the `tcp_flags` and on the packet contents to see if this
                 // should be treated as a new connection.
-                if !Self::treat_as_new_session(tcp_flags, &tcp_packet.bytes) {
+                if !Self::treat_as_new_session(tcp_flags, &tcp_packet.bytes)
+                // || tcp_packet.bytes.len() == 66
+                {
                     // Either it's an existing session, or some sort of existing traffic we don't
                     // care to start mirroring.
                     return Ok(());
@@ -574,7 +613,7 @@ impl TcpConnectionSniffer {
                 };
 
                 let client_ids = self.port_subscriptions.get_topic_subscribers(dest_port);
-                trace!("client_ids {:#?}", client_ids);
+                debug!("client_ids {:#?}", client_ids);
 
                 let message = DaemonTcp::NewConnection(NewTcpConnection {
                     destination_port: dest_port,
@@ -583,7 +622,7 @@ impl TcpConnectionSniffer {
                     remote_address: IpAddr::V4(identifier.source_addr),
                     local_address: IpAddr::V4(identifier.dest_addr),
                 });
-                trace!("message {:#?}", message);
+                debug!("message {:#?}", message);
 
                 self.send_message_to_clients(client_ids.iter(), message)
                     .await?;

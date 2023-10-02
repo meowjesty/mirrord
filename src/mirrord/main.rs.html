@@ -1167,7 +1167,7 @@
                         progress.print(<span class="string">&quot;To disable version checks, set env variable MIRRORD_CHECK_VERSION to &#39;false&#39;.&quot;</span>);
                         progress.success(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;Update to {latest_version} available&quot;</span>)));
                     } <span class="kw">else </span>{
-                        progress.success(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;Running on latest ({latest_version})!&quot;</span>)));
+                        progress.success(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;Running on latest ({CURRENT_VERSION})!&quot;</span>)));
                     }
                 }
             }

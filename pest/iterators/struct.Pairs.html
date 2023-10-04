@@ -63,7 +63,7 @@ the input between token <code>Pair</code>s.</p>
 
 <span class="macro">assert_eq!</span>(tokens.len(), <span class="number">4</span>);</code></pre></div>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.find_first_tagged" class="method"><a class="src rightside" href="../../src/pest/iterators/pairs.rs.html#258-260">source</a><h4 class="code-header">pub fn <a href="#method.find_first_tagged" class="fn">find_first_tagged</a>(&amp;self, tag: &amp;'i <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="struct.Pair.html" title="struct pest::iterators::Pair">Pair</a>&lt;'i, R&gt;&gt;</h4></section></summary><div class="docblock"><p>Finds the first pair that has its node or branch tagged with the provided
-label.</p>
+label. Searches in the flattened <a href="struct.Pairs.html" title="struct pest::iterators::Pairs"><code>Pairs</code></a> iterator.</p>
 <h5 id="examples-4"><a href="#examples-4">Examples</a></h5>
 <p>Try to recognize the branch between add and mul</p>
 
@@ -109,7 +109,7 @@ label.</p>
     self,
     tag: &amp;'i <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>
 ) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/core/iter/adapters/filter/struct.Filter.html" title="struct core::iter::adapters::filter::Filter">Filter</a>&lt;<a class="struct" href="struct.FlatPairs.html" title="struct pest::iterators::FlatPairs">FlatPairs</a>&lt;'i, R&gt;, impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/ops/function/trait.FnMut.html" title="trait core::ops::function::FnMut">FnMut</a>(&amp;<a class="struct" href="struct.Pair.html" title="struct pest::iterators::Pair">Pair</a>&lt;'i, R&gt;) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a> + '_&gt;</h4></section></summary><div class="docblock"><p>Returns the iterator over pairs that have their node or branch tagged
-with the provided label.</p>
+with the provided label. The iterator is built from a flattened <a href="struct.Pairs.html" title="struct pest::iterators::Pairs"><code>Pairs</code></a> iterator.</p>
 <h5 id="examples-5"><a href="#examples-5">Examples</a></h5>
 <p>Try to recognize the node between left and right hand side</p>
 

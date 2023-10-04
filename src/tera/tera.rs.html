@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.17.1/src/tera.rs`."><title>tera.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../tera/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.19.1/src/tera.rs`."><title>tera.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../tera/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -1187,6 +1187,184 @@
 <a href="#1187" id="1187">1187</a>
 <a href="#1188" id="1188">1188</a>
 <a href="#1189" id="1189">1189</a>
+<a href="#1190" id="1190">1190</a>
+<a href="#1191" id="1191">1191</a>
+<a href="#1192" id="1192">1192</a>
+<a href="#1193" id="1193">1193</a>
+<a href="#1194" id="1194">1194</a>
+<a href="#1195" id="1195">1195</a>
+<a href="#1196" id="1196">1196</a>
+<a href="#1197" id="1197">1197</a>
+<a href="#1198" id="1198">1198</a>
+<a href="#1199" id="1199">1199</a>
+<a href="#1200" id="1200">1200</a>
+<a href="#1201" id="1201">1201</a>
+<a href="#1202" id="1202">1202</a>
+<a href="#1203" id="1203">1203</a>
+<a href="#1204" id="1204">1204</a>
+<a href="#1205" id="1205">1205</a>
+<a href="#1206" id="1206">1206</a>
+<a href="#1207" id="1207">1207</a>
+<a href="#1208" id="1208">1208</a>
+<a href="#1209" id="1209">1209</a>
+<a href="#1210" id="1210">1210</a>
+<a href="#1211" id="1211">1211</a>
+<a href="#1212" id="1212">1212</a>
+<a href="#1213" id="1213">1213</a>
+<a href="#1214" id="1214">1214</a>
+<a href="#1215" id="1215">1215</a>
+<a href="#1216" id="1216">1216</a>
+<a href="#1217" id="1217">1217</a>
+<a href="#1218" id="1218">1218</a>
+<a href="#1219" id="1219">1219</a>
+<a href="#1220" id="1220">1220</a>
+<a href="#1221" id="1221">1221</a>
+<a href="#1222" id="1222">1222</a>
+<a href="#1223" id="1223">1223</a>
+<a href="#1224" id="1224">1224</a>
+<a href="#1225" id="1225">1225</a>
+<a href="#1226" id="1226">1226</a>
+<a href="#1227" id="1227">1227</a>
+<a href="#1228" id="1228">1228</a>
+<a href="#1229" id="1229">1229</a>
+<a href="#1230" id="1230">1230</a>
+<a href="#1231" id="1231">1231</a>
+<a href="#1232" id="1232">1232</a>
+<a href="#1233" id="1233">1233</a>
+<a href="#1234" id="1234">1234</a>
+<a href="#1235" id="1235">1235</a>
+<a href="#1236" id="1236">1236</a>
+<a href="#1237" id="1237">1237</a>
+<a href="#1238" id="1238">1238</a>
+<a href="#1239" id="1239">1239</a>
+<a href="#1240" id="1240">1240</a>
+<a href="#1241" id="1241">1241</a>
+<a href="#1242" id="1242">1242</a>
+<a href="#1243" id="1243">1243</a>
+<a href="#1244" id="1244">1244</a>
+<a href="#1245" id="1245">1245</a>
+<a href="#1246" id="1246">1246</a>
+<a href="#1247" id="1247">1247</a>
+<a href="#1248" id="1248">1248</a>
+<a href="#1249" id="1249">1249</a>
+<a href="#1250" id="1250">1250</a>
+<a href="#1251" id="1251">1251</a>
+<a href="#1252" id="1252">1252</a>
+<a href="#1253" id="1253">1253</a>
+<a href="#1254" id="1254">1254</a>
+<a href="#1255" id="1255">1255</a>
+<a href="#1256" id="1256">1256</a>
+<a href="#1257" id="1257">1257</a>
+<a href="#1258" id="1258">1258</a>
+<a href="#1259" id="1259">1259</a>
+<a href="#1260" id="1260">1260</a>
+<a href="#1261" id="1261">1261</a>
+<a href="#1262" id="1262">1262</a>
+<a href="#1263" id="1263">1263</a>
+<a href="#1264" id="1264">1264</a>
+<a href="#1265" id="1265">1265</a>
+<a href="#1266" id="1266">1266</a>
+<a href="#1267" id="1267">1267</a>
+<a href="#1268" id="1268">1268</a>
+<a href="#1269" id="1269">1269</a>
+<a href="#1270" id="1270">1270</a>
+<a href="#1271" id="1271">1271</a>
+<a href="#1272" id="1272">1272</a>
+<a href="#1273" id="1273">1273</a>
+<a href="#1274" id="1274">1274</a>
+<a href="#1275" id="1275">1275</a>
+<a href="#1276" id="1276">1276</a>
+<a href="#1277" id="1277">1277</a>
+<a href="#1278" id="1278">1278</a>
+<a href="#1279" id="1279">1279</a>
+<a href="#1280" id="1280">1280</a>
+<a href="#1281" id="1281">1281</a>
+<a href="#1282" id="1282">1282</a>
+<a href="#1283" id="1283">1283</a>
+<a href="#1284" id="1284">1284</a>
+<a href="#1285" id="1285">1285</a>
+<a href="#1286" id="1286">1286</a>
+<a href="#1287" id="1287">1287</a>
+<a href="#1288" id="1288">1288</a>
+<a href="#1289" id="1289">1289</a>
+<a href="#1290" id="1290">1290</a>
+<a href="#1291" id="1291">1291</a>
+<a href="#1292" id="1292">1292</a>
+<a href="#1293" id="1293">1293</a>
+<a href="#1294" id="1294">1294</a>
+<a href="#1295" id="1295">1295</a>
+<a href="#1296" id="1296">1296</a>
+<a href="#1297" id="1297">1297</a>
+<a href="#1298" id="1298">1298</a>
+<a href="#1299" id="1299">1299</a>
+<a href="#1300" id="1300">1300</a>
+<a href="#1301" id="1301">1301</a>
+<a href="#1302" id="1302">1302</a>
+<a href="#1303" id="1303">1303</a>
+<a href="#1304" id="1304">1304</a>
+<a href="#1305" id="1305">1305</a>
+<a href="#1306" id="1306">1306</a>
+<a href="#1307" id="1307">1307</a>
+<a href="#1308" id="1308">1308</a>
+<a href="#1309" id="1309">1309</a>
+<a href="#1310" id="1310">1310</a>
+<a href="#1311" id="1311">1311</a>
+<a href="#1312" id="1312">1312</a>
+<a href="#1313" id="1313">1313</a>
+<a href="#1314" id="1314">1314</a>
+<a href="#1315" id="1315">1315</a>
+<a href="#1316" id="1316">1316</a>
+<a href="#1317" id="1317">1317</a>
+<a href="#1318" id="1318">1318</a>
+<a href="#1319" id="1319">1319</a>
+<a href="#1320" id="1320">1320</a>
+<a href="#1321" id="1321">1321</a>
+<a href="#1322" id="1322">1322</a>
+<a href="#1323" id="1323">1323</a>
+<a href="#1324" id="1324">1324</a>
+<a href="#1325" id="1325">1325</a>
+<a href="#1326" id="1326">1326</a>
+<a href="#1327" id="1327">1327</a>
+<a href="#1328" id="1328">1328</a>
+<a href="#1329" id="1329">1329</a>
+<a href="#1330" id="1330">1330</a>
+<a href="#1331" id="1331">1331</a>
+<a href="#1332" id="1332">1332</a>
+<a href="#1333" id="1333">1333</a>
+<a href="#1334" id="1334">1334</a>
+<a href="#1335" id="1335">1335</a>
+<a href="#1336" id="1336">1336</a>
+<a href="#1337" id="1337">1337</a>
+<a href="#1338" id="1338">1338</a>
+<a href="#1339" id="1339">1339</a>
+<a href="#1340" id="1340">1340</a>
+<a href="#1341" id="1341">1341</a>
+<a href="#1342" id="1342">1342</a>
+<a href="#1343" id="1343">1343</a>
+<a href="#1344" id="1344">1344</a>
+<a href="#1345" id="1345">1345</a>
+<a href="#1346" id="1346">1346</a>
+<a href="#1347" id="1347">1347</a>
+<a href="#1348" id="1348">1348</a>
+<a href="#1349" id="1349">1349</a>
+<a href="#1350" id="1350">1350</a>
+<a href="#1351" id="1351">1351</a>
+<a href="#1352" id="1352">1352</a>
+<a href="#1353" id="1353">1353</a>
+<a href="#1354" id="1354">1354</a>
+<a href="#1355" id="1355">1355</a>
+<a href="#1356" id="1356">1356</a>
+<a href="#1357" id="1357">1357</a>
+<a href="#1358" id="1358">1358</a>
+<a href="#1359" id="1359">1359</a>
+<a href="#1360" id="1360">1360</a>
+<a href="#1361" id="1361">1361</a>
+<a href="#1362" id="1362">1362</a>
+<a href="#1363" id="1363">1363</a>
+<a href="#1364" id="1364">1364</a>
+<a href="#1365" id="1365">1365</a>
+<a href="#1366" id="1366">1366</a>
+<a href="#1367" id="1367">1367</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 <span class="kw">use </span>std::fmt;
 <span class="kw">use </span>std::fs::File;
@@ -1211,7 +1389,41 @@
 <span class="doccomment">/// The escape function type definition
 </span><span class="kw">pub type </span>EscapeFn = <span class="kw">fn</span>(<span class="kw-2">&amp;</span>str) -&gt; String;
 
-<span class="doccomment">/// The main point of interaction in this library.
+<span class="doccomment">/// Main point of interaction in this library.
+///
+/// The [`Tera`] struct is the primary interface for working with the Tera template engine. It contains parsed templates, registered filters (which can filter
+/// data), functions, and testers. It also contains some configuration options, such as a list of
+/// suffixes for files that have autoescaping turned on.
+///
+/// It is responsible for:
+///
+/// - Loading and managing templates from files or strings
+/// - Parsing templates and checking for syntax errors
+/// - Maintaining a cache of compiled templates for efficient rendering
+/// - Providing an interface for rendering templates with given contexts
+/// - Managing template inheritance and includes
+/// - Handling custom filters and functions
+/// - Overriding settings, such as autoescape rules
+///
+/// # Example
+///
+/// Basic usage:
+///
+/// ```
+/// use tera::Tera;
+///
+/// // Create a new Tera instance and add a template from a string
+/// let mut tera = Tera::new(&quot;templates/**/*&quot;).unwrap();
+/// tera.add_raw_template(&quot;hello&quot;, &quot;Hello, {{ name }}!&quot;).unwrap();
+///
+/// // Prepare the context with some data
+/// let mut context = tera::Context::new();
+/// context.insert(&quot;name&quot;, &quot;World&quot;);
+///
+/// // Render the template with the given context
+/// let rendered = tera.render(&quot;hello&quot;, &amp;context).unwrap();
+/// assert_eq!(rendered, &quot;Hello, World!&quot;);
+/// ```
 </span><span class="attr">#[derive(Clone)]
 </span><span class="kw">pub struct </span>Tera {
     <span class="comment">// The glob used in `Tera::new`, None if Tera was instantiated differently
@@ -1263,46 +1475,63 @@
         <span class="prelude-val">Ok</span>(tera)
     }
 
-    <span class="doccomment">/// Create a new instance of Tera, containing all the parsed templates found in the `dir` glob
+    <span class="doccomment">/// Create a new instance of Tera, containing all the parsed templates found in the `dir` glob.
     ///
-    ///```no_compile
-    ///match Tera::new(&quot;templates/**/*&quot;) {
-    ///    Ok(t) =&gt; t,
-    ///    Err(e) =&gt; {
-    ///        println!(&quot;Parsing error(s): {}&quot;, e);
-    ///        ::std::process::exit(1);
-    ///    }
-    ///}
-    ///```
+    /// A glob is a pattern for matching multiple file paths, employing special characters such as
+    /// the single asterisk (`*`) to match any sequence of characters within a single directory
+    /// level, and the double asterisk (`**`) to match any sequence of characters across multiple
+    /// directory levels, thereby providing a flexible and concise way to select files based on
+    /// their names, extensions, or hierarchical relationships. For example, the glob pattern
+    /// `templates/*.html` will match all files with the `.html` extension located directly inside
+    /// the `templates` folder, while the glob pattern `templates/**/*.html` will match all files
+    /// with the `.html` extension directly inside or in a subdirectory of `templates`.
+    ///
+    /// In order to create an empty [`Tera`] instance, you can use the [`Default`] implementation.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # use tera::Tera;
+    /// let tera = Tera::new(&quot;examples/basic/templates/**/*&quot;).unwrap();
+    /// ```
     </span><span class="kw">pub fn </span>new(dir: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Tera&gt; {
         <span class="self">Self</span>::create(dir, <span class="bool-val">false</span>)
     }
 
-    <span class="doccomment">/// Create a new instance of Tera, containing all the parsed templates found in the `dir` glob
-    /// The difference with `Tera::new` is that it won&#39;t build the inheritance chains automatically
-    /// so you are free to modify the templates if you need to.
-    /// You will NOT get a working Tera instance using `Tera::parse`, you will need to call
-    /// `tera.build_inheritance_chains()` to make it usable
+    <span class="doccomment">/// Create a new instance of Tera, containing all the parsed templates found in the `dir` glob.
     ///
-    ///```no_compile
-    ///let mut tera = match Tera::parse(&quot;templates/**/*&quot;) {
-    ///    Ok(t) =&gt; t,
-    ///    Err(e) =&gt; {
-    ///        println!(&quot;Parsing error(s): {}&quot;, e);
-    ///        ::std::process::exit(1);
-    ///    }
-    ///};
-    ///tera.build_inheritance_chains()?;
-    ///```
+    /// The difference to [`Tera::new`] is that it won&#39;t build the inheritance chains
+    /// automatically, so you are free to modify the templates if you need to.
+    ///
+    /// # Inheritance Chains
+    ///
+    /// You will *not* get a working Tera instance using this method. You will need to call
+    /// [`build_inheritance_chains()`](Tera::build_inheritance_chains) to make it usable.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # use tera::Tera;
+    /// let mut tera = Tera::parse(&quot;examples/basic/templates/**/*&quot;).unwrap();
+    ///
+    /// // do not forget to build the inheritance chains
+    /// tera.build_inheritance_chains().unwrap();
+    /// ```
     </span><span class="kw">pub fn </span>parse(dir: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Tera&gt; {
         <span class="self">Self</span>::create(dir, <span class="bool-val">true</span>)
     }
 
-    <span class="doccomment">/// Loads all the templates found in the glob that was given to Tera::new
+    <span class="doccomment">/// Loads all the templates found in the glob that was given to [`Tera::new`].
     </span><span class="kw">fn </span>load_from_glob(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        <span class="kw">if </span><span class="self">self</span>.glob.is_none() {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::msg(<span class="string">&quot;Tera can only load from glob if a glob is provided&quot;</span>));
-        }
+        <span class="kw">let </span>glob = <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.glob {
+            <span class="prelude-val">Some</span>(g) =&gt; g,
+            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(Error::msg(<span class="string">&quot;Tera can only load from glob if a glob is provided&quot;</span>)),
+        };
+
         <span class="comment">// We want to preserve templates that have been added through
         // Tera::extend so we only keep those
         </span><span class="self">self</span>.templates = <span class="self">self
@@ -1314,14 +1543,19 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>errors = String::new();
 
-        <span class="kw">let </span>dir = <span class="self">self</span>.glob.clone().unwrap();
-        <span class="comment">// We clean the filename by removing the dir given
-        // to Tera so users don&#39;t have to prefix everytime
-        </span><span class="kw">let </span><span class="kw-2">mut </span>parent_dir = dir.split_at(dir.find(<span class="string">&#39;*&#39;</span>).unwrap()).<span class="number">0</span>;
-        <span class="comment">// Remove `./` from the glob if used as it would cause an error in strip_prefix
-        </span><span class="kw">if </span>parent_dir.starts_with(<span class="string">&quot;./&quot;</span>) {
-            parent_dir = <span class="kw-2">&amp;</span>parent_dir[<span class="number">2</span>..];
-        }
+        <span class="comment">// Need to canonicalize the glob path because globwalk always returns
+        // an empty list for paths starting with `./` or `../`.
+        // See https://github.com/Keats/tera/issues/574 for the Tera discussion
+        // and https://github.com/Gilnaa/globwalk/issues/28 for the upstream issue.
+        </span><span class="kw">let </span>(parent_dir, glob_end) = glob.split_at(glob.find(<span class="string">&#39;*&#39;</span>).unwrap());
+        <span class="kw">let </span>parent_dir = <span class="kw">match </span>std::fs::canonicalize(parent_dir) {
+            <span class="prelude-val">Ok</span>(d) =&gt; d,
+            <span class="comment">// If canonicalize fails, just abort it and resume with the given path.
+            // Consumers expect invalid globs to just return the empty set instead of failing.
+            // See https://github.com/Keats/tera/issues/819#issuecomment-1480392230
+            </span><span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; std::path::PathBuf::from(parent_dir),
+        };
+        <span class="kw">let </span>dir = parent_dir.join(glob_end).into_os_string().into_string().unwrap();
 
         <span class="comment">// We are parsing all the templates on instantiation
         </span><span class="kw">for </span>entry <span class="kw">in </span>glob_builder(<span class="kw-2">&amp;</span>dir)
@@ -1342,7 +1576,7 @@
                     .unwrap()
                     .to_string_lossy()
                     <span class="comment">// unify on forward slash
-                    </span>.replace(<span class="string">&quot;\\&quot;</span>, <span class="string">&quot;/&quot;</span>);
+                    </span>.replace(<span class="string">&#39;\\&#39;</span>, <span class="string">&quot;/&quot;</span>);
 
                 <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = <span class="self">self</span>.add_file(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>filepath), path) {
                     <span class="kw">use </span>std::error::Error;
@@ -1385,14 +1619,15 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// We need to know the hierarchy of templates to be able to render multiple extends level
-    /// This happens at compile-time to avoid checking it every time we want to render a template
-    /// This also checks for soundness issues in the inheritance chains, such as missing template or
-    /// circular extends.
-    /// It also builds the block inheritance chain and detects when super() is called in a place
-    /// where it can&#39;t possibly work
+    <span class="doccomment">/// Build inheritance chains for loaded templates.
     ///
-    /// You generally don&#39;t need to call that yourself, unless you used `Tera::parse`
+    /// We need to know the hierarchy of templates to be able to render multiple extends level.
+    /// This happens at compile-time to avoid checking it every time we want to render a template.
+    /// This also checks for soundness issues in the inheritance chains, such as missing template
+    /// or circular extends.  It also builds the block inheritance chain and detects when super()
+    /// is called in a place where it can&#39;t possibly work
+    ///
+    /// You generally don&#39;t need to call that yourself, unless you used [`Tera::parse()`].
     </span><span class="kw">pub fn </span>build_inheritance_chains(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="comment">// Recursive fn that finds all the parents and put them in an ordered Vec from closest to first parent
         // parent template
@@ -1412,7 +1647,7 @@
                         parents.push(parent.name.clone());
                         build_chain(templates, start, parent, parents)
                     }
-                    <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(Error::missing_parent(<span class="kw-2">&amp;</span>template.name, <span class="kw-2">&amp;</span>p)),
+                    <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(Error::missing_parent(<span class="kw-2">&amp;</span>template.name, p)),
                 },
                 <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(parents),
             }
@@ -1469,10 +1704,10 @@
     <span class="doccomment">/// We keep track of macro files loaded in each Template so we can know whether one or them
     /// is missing and error accordingly before the user tries to render a template.
     ///
-    /// As with `self::build_inheritance_chains`, you don&#39;t usually need to call that yourself.
+    /// As with [`build_inheritance_chains()`](Self::build_inheritance_chains), you don&#39;t usually need to call that yourself.
     </span><span class="kw">pub fn </span>check_macro_files(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">for </span>template <span class="kw">in </span><span class="self">self</span>.templates.values() {
-            <span class="kw">for </span><span class="kw-2">&amp;</span>(<span class="kw-2">ref </span>tpl_name, <span class="kw">_</span>) <span class="kw">in </span><span class="kw-2">&amp;</span>template.imported_macro_files {
+            <span class="kw">for </span>(tpl_name, <span class="kw">_</span>) <span class="kw">in </span><span class="kw-2">&amp;</span>template.imported_macro_files {
                 <span class="kw">if </span>!<span class="self">self</span>.templates.contains_key(tpl_name) {
                     <span class="kw">return </span><span class="prelude-val">Err</span>(Error::msg(<span class="macro">format!</span>(
                         <span class="string">&quot;Template `{}` loads macros from `{}` which isn&#39;t present in Tera&quot;</span>,
@@ -1485,17 +1720,38 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// Renders a Tera template given a `tera::Context`,
+    <span class="doccomment">/// Renders a Tera template given a [`Context`].
     ///
-    /// To render a template with an empty context, simply pass a new `tera::Context` object
+    /// # Examples
     ///
-    /// ```no_compile
-    /// // Rendering a template with a normal context
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use tera::{Tera, Context};
+    /// // Create new tera instance with sample template
+    /// let mut tera = Tera::default();
+    /// tera.add_raw_template(&quot;info&quot;, &quot;My age is {{ age }}.&quot;);
+    ///
+    /// // Create new context
     /// let mut context = Context::new();
-    /// context.insert(&quot;age&quot;, 18);
-    /// tera.render(&quot;hello.html&quot;, context);
-    /// // Rendering a template with an empty context
-    /// let output = tera.render(&quot;hello.html&quot;, Context::new());
+    /// context.insert(&quot;age&quot;, &amp;18);
+    ///
+    /// // Render template using the context
+    /// let output = tera.render(&quot;info&quot;, &amp;context).unwrap();
+    /// assert_eq!(output, &quot;My age is 18.&quot;);
+    /// ```
+    ///
+    /// To render a template with an empty context, simply pass an empty [`Context`] object.
+    ///
+    /// ```
+    /// # use tera::{Tera, Context};
+    /// // Create new tera instance with demo template
+    /// let mut tera = Tera::default();
+    /// tera.add_raw_template(&quot;hello.html&quot;, &quot;&lt;h1&gt;Hello&lt;/h1&gt;&quot;);
+    ///
+    /// // Render a template with an empty context
+    /// let output = tera.render(&quot;hello.html&quot;, &amp;Context::new()).unwrap();
+    /// assert_eq!(output, &quot;&lt;h1&gt;Hello&lt;/h1&gt;&quot;);
     /// ```
     </span><span class="kw">pub fn </span>render(<span class="kw-2">&amp;</span><span class="self">self</span>, template_name: <span class="kw-2">&amp;</span>str, context: <span class="kw-2">&amp;</span>Context) -&gt; <span class="prelude-ty">Result</span>&lt;String&gt; {
         <span class="kw">let </span>template = <span class="self">self</span>.get_template(template_name)<span class="question-mark">?</span>;
@@ -1503,19 +1759,29 @@
         renderer.render()
     }
 
-    <span class="doccomment">/// Renders a Tera template given a `tera::Context` to a [std::io::Write],
+    <span class="doccomment">/// Renders a Tera template given a [`Context`] to something that implements [`Write`].
     ///
-    /// The only difference from [Self::render] is that this version doesn&#39;t convert buffer to a String,
-    /// allowing to render directly to anything that implements [std::io::Write].
+    /// The only difference from [`render()`](Self::render) is that this version doesn&#39;t convert
+    /// buffer to a String, allowing to render directly to anything that implements [`Write`]. For
+    /// example, this could be used to write directly to a [`File`](std::fs::File).
     ///
-    /// Any i/o error will be reported in the result.
+    /// Any I/O error will be reported in the result.
     ///
-    /// ```no_compile
+    /// # Examples
+    ///
+    /// Rendering into a `Vec&lt;u8&gt;`:
+    ///
+    /// ```
+    /// # use tera::{Context, Tera};
+    /// let mut tera = Tera::default();
+    /// tera.add_raw_template(&quot;index.html&quot;, &quot;&lt;p&gt;{{ name }}&lt;/p&gt;&quot;);
+    ///
     /// // Rendering a template to an internal buffer
     /// let mut buffer = Vec::new();
     /// let mut context = Context::new();
-    /// context.insert(&quot;age&quot;, 18);
-    /// tera.render_to(&quot;hello.html&quot;, context, &amp;mut buffer);
+    /// context.insert(&quot;name&quot;, &quot;John Wick&quot;);
+    /// tera.render_to(&quot;index.html&quot;, &amp;context, &amp;mut buffer).unwrap();
+    /// assert_eq!(buffer, b&quot;&lt;p&gt;John Wick&lt;/p&gt;&quot;);
     /// ```
     </span><span class="kw">pub fn </span>render_to(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
@@ -1543,7 +1809,7 @@
     /// ```
     </span><span class="kw">pub fn </span>render_str(<span class="kw-2">&amp;mut </span><span class="self">self</span>, input: <span class="kw-2">&amp;</span>str, context: <span class="kw-2">&amp;</span>Context) -&gt; <span class="prelude-ty">Result</span>&lt;String&gt; {
         <span class="self">self</span>.add_raw_template(ONE_OFF_TEMPLATE_NAME, input)<span class="question-mark">?</span>;
-        <span class="kw">let </span>result = <span class="self">self</span>.render(ONE_OFF_TEMPLATE_NAME, <span class="kw-2">&amp;</span>context);
+        <span class="kw">let </span>result = <span class="self">self</span>.render(ONE_OFF_TEMPLATE_NAME, context);
         <span class="self">self</span>.templates.remove(ONE_OFF_TEMPLATE_NAME);
         result
     }
@@ -1601,14 +1867,24 @@
         <span class="self">self</span>.templates.keys().map(|s| s.as_str())
     }
 
-    <span class="doccomment">/// Add a single template to the Tera instance
+    <span class="doccomment">/// Add a single template to the Tera instance.
     ///
     /// This will error if the inheritance chain can&#39;t be built, such as adding a child
     /// template without the parent one.
-    /// If you want to add several templates, use [Tera::add_templates](struct.Tera.html#method.add_raw_templates)
     ///
-    /// ```no_compile
-    /// tera.add_raw_template(&quot;new.html&quot;, &quot;Blabla&quot;);
+    /// # Bulk loading
+    ///
+    /// If you want to add several templates, use
+    /// [`add_raw_templates()`](Tera::add_raw_templates).
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use tera::Tera;
+    /// let mut tera = Tera::default();
+    /// tera.add_raw_template(&quot;new.html&quot;, &quot;Blabla&quot;).unwrap();
     /// ```
     </span><span class="kw">pub fn </span>add_raw_template(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, content: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>tpl = Template::new(name, <span class="prelude-val">None</span>, content)
@@ -1654,11 +1930,13 @@
     /// template without the parent one.
     /// If you want to add several file, use [Tera::add_template_files](struct.Tera.html#method.add_template_files)
     ///
-    /// ```no_compile
+    /// ```
+    /// # use tera::Tera;
+    /// let mut tera = Tera::default();
+    /// // Rename template with custom name
+    /// tera.add_template_file(&quot;examples/basic/templates/macros.html&quot;, Some(&quot;macros.html&quot;)).unwrap();
     /// // Use path as name
-    /// tera.add_template_file(path, None);
-    /// // Rename
-    /// tera.add_template_file(path, Some(&quot;index&quot;));
+    /// tera.add_template_file(&quot;examples/basic/templates/base.html&quot;, None).unwrap();
     /// ```
     </span><span class="kw">pub fn </span>add_template_file&lt;P: AsRef&lt;Path&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, path: P, name: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="self">self</span>.add_file(name, path)<span class="question-mark">?</span>;
@@ -1667,16 +1945,20 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// Add several templates from paths to the Tera instance. The default name for the template is
-    /// the path given, but this can be renamed with the second parameter of the tuple
+    <span class="doccomment">/// Add several templates from paths to the Tera instance.
+    ///
+    /// The default name for the template is the path given, but this can be renamed with the
+    /// second parameter of the tuple
     ///
     /// This will error if the inheritance chain can&#39;t be built, such as adding a child
     /// template without the parent one.
     ///
-    /// ```no_compile
+    /// ```no_run
+    /// # use tera::Tera;
+    /// let mut tera = Tera::default();
     /// tera.add_template_files(vec![
-    ///     (path1, None), // this template will have the value of path1 as name
-    ///     (path2, Some(&quot;hey&quot;)), // this template will have `hey` as name
+    ///     (&quot;./path/to/template.tera&quot;, None), // this template will have the value of path1 as name
+    ///     (&quot;./path/to/other.tera&quot;, Some(&quot;hey&quot;)), // this template will have `hey` as name
     /// ]);
     /// ```
     </span><span class="kw">pub fn </span>add_template_files&lt;I, P, N&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, files: I) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;
@@ -1744,7 +2026,8 @@
 
     <span class="doccomment">/// Register a function with Tera.
     ///
-    /// If a function with that name already exists, it will be overwritten
+    /// This registers an arbitrary function to make it callable from within a template. If a
+    /// function with that name already exists, it will be overwritten.
     ///
     /// ```no_compile
     /// tera.register_function(&quot;range&quot;, range);
@@ -1767,6 +2050,7 @@
         <span class="self">self</span>.register_filter(<span class="string">&quot;capitalize&quot;</span>, string::capitalize);
         <span class="self">self</span>.register_filter(<span class="string">&quot;title&quot;</span>, string::title);
         <span class="self">self</span>.register_filter(<span class="string">&quot;linebreaksbr&quot;</span>, string::linebreaksbr);
+        <span class="self">self</span>.register_filter(<span class="string">&quot;indent&quot;</span>, string::indent);
         <span class="self">self</span>.register_filter(<span class="string">&quot;striptags&quot;</span>, string::striptags);
         <span class="self">self</span>.register_filter(<span class="string">&quot;spaceless&quot;</span>, string::spaceless);
         <span class="attr">#[cfg(feature = <span class="string">&quot;urlencode&quot;</span>)]
@@ -1794,6 +2078,7 @@
         <span class="self">self</span>.register_filter(<span class="string">&quot;map&quot;</span>, array::map);
         <span class="self">self</span>.register_filter(<span class="string">&quot;concat&quot;</span>, array::concat);
 
+        <span class="self">self</span>.register_filter(<span class="string">&quot;abs&quot;</span>, number::abs);
         <span class="self">self</span>.register_filter(<span class="string">&quot;pluralize&quot;</span>, number::pluralize);
         <span class="self">self</span>.register_filter(<span class="string">&quot;round&quot;</span>, number::round);
 
@@ -1836,18 +2121,23 @@
         <span class="self">self</span>.register_function(<span class="string">&quot;get_env&quot;</span>, functions::get_env);
     }
 
-    <span class="doccomment">/// Select which suffix(es) to automatically do HTML escaping on,
-    ///`[&quot;.html&quot;, &quot;.htm&quot;, &quot;.xml&quot;]` by default.
+    <span class="doccomment">/// Select which suffix(es) to automatically do HTML escaping on.
     ///
-    /// Only call this function if you wish to change the defaults.
+    /// By default, autoescaping is performed on `.html`, `.htm` and `.xml` template files. Only
+    /// call this function if you wish to change the defaults.
     ///
+    /// # Examples
     ///
-    ///```no_compile
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use tera::Tera;
+    /// let mut tera = Tera::default();
     /// // escape only files ending with `.php.html`
     /// tera.autoescape_on(vec![&quot;.php.html&quot;]);
     /// // disable autoescaping completely
     /// tera.autoescape_on(vec![]);
-    ///```
+    /// ```
     </span><span class="kw">pub fn </span>autoescape_on(<span class="kw-2">&amp;mut </span><span class="self">self</span>, suffixes: Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str&gt;) {
         <span class="self">self</span>.autoescape_suffixes = suffixes;
     }
@@ -1858,35 +2148,59 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>.escape_fn
     }
 
-    <span class="doccomment">/// Set user-defined function which applied to a rendered content.
+    <span class="doccomment">/// Set user-defined function that is used to escape content.
     ///
-    ///```no_compile
-    /// fn escape_c_string(input: &amp;str) -&gt; String { ... }
+    /// Often times, arbitrary data needs to be injected into a template without allowing injection
+    /// attacks. For this reason, typically escaping is performed on all input. By default, the
+    /// escaping function will produce HTML escapes, but it can be overridden to produce escapes
+    /// more appropriate to the language being used.
     ///
-    /// // make valid C string literal
-    /// tera.set_escape_fn(escape_c_string);
-    /// tera.add_raw_template(&quot;foo&quot;, &quot;\&quot;{{ content }}\&quot;&quot;).unwrap();
-    /// tera.autoescape_on(vec![&quot;foo&quot;]);
+    /// Inside templates, escaping can be turned off for specific content using the `safe` filter.
+    /// For example, the string `{{ data }}` inside a template will escape data, while `{{ data |
+    /// safe }}` will not.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use tera::{Tera, Context};
+    /// // Create new Tera instance
+    /// let mut tera = Tera::default();
+    ///
+    /// // Override escape function
+    /// tera.set_escape_fn(|input| {
+    ///     input.escape_default().collect()
+    /// });
+    ///
+    /// // Create template and enable autoescape
+    /// tera.add_raw_template(&quot;hello.js&quot;, &quot;const data = \&quot;{{ content }}\&quot;;&quot;).unwrap();
+    /// tera.autoescape_on(vec![&quot;js&quot;]);
+    ///
+    /// // Create context with some data
     /// let mut context = Context::new();
     /// context.insert(&quot;content&quot;, &amp;&quot;Hello\n\&#39;world\&quot;!&quot;);
-    /// let result = tera.render(&quot;foo&quot;, &amp;context).unwrap();
-    /// assert_eq!(result, r#&quot;&quot;Hello\n\&#39;world\&quot;!&quot;&quot;#);
-    ///```
+    ///
+    /// // Render template
+    /// let result = tera.render(&quot;hello.js&quot;, &amp;context).unwrap();
+    /// assert_eq!(result, r#&quot;const data = &quot;Hello\n\&#39;world\&quot;!&quot;;&quot;#);
+    /// ```
     </span><span class="kw">pub fn </span>set_escape_fn(<span class="kw-2">&amp;mut </span><span class="self">self</span>, function: EscapeFn) {
         <span class="self">self</span>.escape_fn = function;
     }
 
-    <span class="doccomment">/// Reset escape function to default `tera::escape_html`.
+    <span class="doccomment">/// Reset escape function to default [`escape_html()`].
     </span><span class="kw">pub fn </span>reset_escape_fn(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="self">self</span>.escape_fn = escape_html;
     }
 
-    <span class="doccomment">/// Re-parse all templates found in the glob given to Tera
+    <span class="doccomment">/// Re-parse all templates found in the glob given to Tera.
+    ///
     /// Use this when you are watching a directory and want to reload everything,
     /// for example when a file is added.
     ///
     /// If you are adding templates without using a glob, we can&#39;t know when a template
-    /// is deleted, which would result in an error if we are trying to reload that file
+    /// is deleted, which would result in an error if we are trying to reload that file.
     </span><span class="kw">pub fn </span>full_reload(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">if </span><span class="self">self</span>.glob.is_some() {
             <span class="self">self</span>.load_from_glob()<span class="question-mark">?</span>;
@@ -1898,7 +2212,10 @@
         <span class="self">self</span>.check_macro_files()
     }
 
-    <span class="doccomment">/// Use that method when you want to add a given Tera instance templates/filters/testers/functions
+    <span class="doccomment">/// Extend this [`Tera`] instance with the templates, filters, testers and functions defined in
+    /// another instance.
+    ///
+    /// Use that method when you want to add a given Tera instance templates/filters/testers/functions
     /// to your own. If a template/filter/tester/function with the same name already exists in your instance,
     /// it will not be overwritten.
     ///
@@ -2324,6 +2641,36 @@
         <span class="macro">assert_eq!</span>(tera.templates.len(), <span class="number">2</span>);
     }
 
+    <span class="comment">// Test for https://github.com/Keats/tera/issues/574
+    </span><span class="attr">#[test]
+    </span><span class="kw">fn </span>glob_work_with_paths_starting_with_dots() {
+        <span class="kw">use </span>std::path::PathBuf;
+
+        <span class="kw">let </span>this_dir = std::env::current_dir()
+            .expect(<span class="string">&quot;Could not retrieve the executable&#39;s current directory.&quot;</span>);
+
+        <span class="kw">let </span>scratch_dir = tempfile::Builder::new()
+            .prefix(<span class="string">&quot;tera_test_scratchspace&quot;</span>)
+            .tempdir_in(<span class="kw-2">&amp;</span>this_dir)
+            .expect(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                <span class="string">&quot;Could not create temporary directory for test in current directory ({}).&quot;</span>,
+                this_dir.display()
+            ));
+        <span class="macro">dbg!</span>(<span class="kw-2">&amp;</span>scratch_dir.path().display());
+
+        File::create(scratch_dir.path().join(<span class="string">&quot;hey.html&quot;</span>)).expect(<span class="string">&quot;Failed to create a test file&quot;</span>);
+        File::create(scratch_dir.path().join(<span class="string">&quot;ho.html&quot;</span>)).expect(<span class="string">&quot;Failed to create a test file&quot;</span>);
+        <span class="kw">let </span>glob = PathBuf::from(<span class="string">&quot;./&quot;</span>)
+            .join(scratch_dir.path().file_name().unwrap())
+            .join(<span class="string">&quot;**&quot;</span>)
+            .join(<span class="string">&quot;*.html&quot;</span>)
+            .into_os_string()
+            .into_string()
+            .unwrap();
+        <span class="kw">let </span>tera = Tera::new(<span class="kw-2">&amp;</span>glob).expect(<span class="string">&quot;Couldn&#39;t build Tera instance.&quot;</span>);
+        <span class="macro">assert_eq!</span>(tera.templates.len(), <span class="number">2</span>);
+    }
+
     <span class="comment">// https://github.com/Keats/tera/issues/396
     </span><span class="attr">#[test]
     </span><span class="kw">fn </span>issues_found_fuzzing_expressions_are_fixed() {
@@ -2374,6 +2721,15 @@
                 <span class="macro">assert!</span>(res.is_err());
             }
         }
+    }
+
+    <span class="comment">// https://github.com/Keats/tera/issues/819
+    </span><span class="attr">#[test]
+    </span><span class="kw">fn </span>empty_list_on_invalid_glob() {
+        <span class="kw">let </span>tera = Tera::new(<span class="string">&quot;\\dev/null/*&quot;</span>);
+        <span class="macro">println!</span>(<span class="string">&quot;{:?}&quot;</span>, tera);
+        <span class="macro">assert!</span>(tera.is_ok());
+        <span class="macro">assert!</span>(tera.unwrap().templates.is_empty());
     }
 }
 </code></pre></div></section></main></body></html>

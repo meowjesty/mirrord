@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BINARY","CONVENTIONAL","DECIMAL"],"enum":["FixedAt","Kilo"],"struct":["FileSizeOpts"]};

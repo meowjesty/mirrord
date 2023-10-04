@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.17.1/src/builtins/filters/string.rs`."><title>string.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../tera/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.19.1/src/builtins/filters/string.rs`."><title>string.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../tera/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -864,6 +864,77 @@
 <a href="#864" id="864">864</a>
 <a href="#865" id="865">865</a>
 <a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
 </pre></div><pre class="rust"><code><span class="doccomment">/// Filters operating on string
 </span><span class="kw">use </span>std::collections::HashMap;
 
@@ -927,7 +998,7 @@
 
 <span class="macro">lazy_static! </span>{
     <span class="kw">static </span><span class="kw-2">ref </span>STRIPTAGS_RE: Regex = Regex::new(<span class="string">r&quot;(&lt;!--.*?--&gt;|&lt;[^&gt;]*&gt;)&quot;</span>).unwrap();
-    <span class="kw">static </span><span class="kw-2">ref </span>WORDS_RE: Regex = Regex::new(<span class="string">r&quot;\b(?P&lt;first&gt;\w)(?P&lt;rest&gt;\w*)\b&quot;</span>).unwrap();
+    <span class="kw">static </span><span class="kw-2">ref </span>WORDS_RE: Regex = Regex::new(<span class="string">r&quot;\b(?P&lt;first&gt;[\w&#39;])(?P&lt;rest&gt;[\w&#39;]*)\b&quot;</span>).unwrap();
     <span class="kw">static </span><span class="kw-2">ref </span>SPACELESS_RE: Regex = Regex::new(<span class="string">r&quot;&gt;\s+&lt;&quot;</span>).unwrap();
 }
 
@@ -935,35 +1006,35 @@
 </span><span class="kw">pub fn </span>upper(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;upper&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.to_uppercase()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.to_uppercase()).unwrap())
 }
 
 <span class="doccomment">/// Convert a value to lowercase.
 </span><span class="kw">pub fn </span>lower(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;lower&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.to_lowercase()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.to_lowercase()).unwrap())
 }
 
 <span class="doccomment">/// Strip leading and trailing whitespace.
 </span><span class="kw">pub fn </span>trim(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;trim&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.trim()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.trim()).unwrap())
 }
 
 <span class="doccomment">/// Strip leading whitespace.
 </span><span class="kw">pub fn </span>trim_start(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;trim_start&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.trim_start()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.trim_start()).unwrap())
 }
 
 <span class="doccomment">/// Strip trailing whitespace.
 </span><span class="kw">pub fn </span>trim_end(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;trim_end&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.trim_end()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.trim_end()).unwrap())
 }
 
 <span class="doccomment">/// Strip leading characters that match the given pattern.
@@ -1039,14 +1110,14 @@
     }
 
     <span class="kw">let </span>result = s[..graphemes[length].<span class="number">0</span>].to_string() + <span class="kw-2">&amp;</span>end;
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>result).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(result).unwrap())
 }
 
 <span class="doccomment">/// Gets the number of words in a string.
 </span><span class="kw">pub fn </span>wordcount(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;wordcount&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.split_whitespace().count()).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.split_whitespace().count()).unwrap())
 }
 
 <span class="doccomment">/// Replaces given `from` substring with `to` string.
@@ -1063,7 +1134,7 @@
         <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(Error::msg(<span class="string">&quot;Filter `replace` expected an arg called `to`&quot;</span>)),
     };
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.replace(<span class="kw-2">&amp;</span>from, <span class="kw-2">&amp;</span>to)).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.replace(<span class="kw-2">&amp;</span>from, <span class="kw-2">&amp;</span>to)).unwrap())
 }
 
 <span class="doccomment">/// First letter of the string is uppercase rest is lowercase
@@ -1074,7 +1145,7 @@
         <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(to_value(<span class="string">&quot;&quot;</span>).unwrap()),
         <span class="prelude-val">Some</span>(f) =&gt; {
             <span class="kw">let </span>res = f.to_uppercase().collect::&lt;String&gt;() + <span class="kw-2">&amp;</span>chars.as_str().to_lowercase();
-            <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>res).unwrap())
+            <span class="prelude-val">Ok</span>(to_value(res).unwrap())
         }
     }
 }
@@ -1083,7 +1154,7 @@
 </span><span class="attr">#[cfg(feature = <span class="string">&quot;urlencode&quot;</span>)]
 </span><span class="kw">pub fn </span>urlencode(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;urlencode&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="kw">let </span>encoded = percent_encode(s.as_bytes(), <span class="kw-2">&amp;</span>PYTHON_ENCODE_SET).to_string();
+    <span class="kw">let </span>encoded = percent_encode(s.as_bytes(), PYTHON_ENCODE_SET).to_string();
     <span class="prelude-val">Ok</span>(Value::String(encoded))
 }
 
@@ -1091,28 +1162,28 @@
 </span><span class="attr">#[cfg(feature = <span class="string">&quot;urlencode&quot;</span>)]
 </span><span class="kw">pub fn </span>urlencode_strict(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;urlencode_strict&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="kw">let </span>encoded = percent_encode(s.as_bytes(), <span class="kw-2">&amp;</span>NON_ALPHANUMERIC).to_string();
+    <span class="kw">let </span>encoded = percent_encode(s.as_bytes(), NON_ALPHANUMERIC).to_string();
     <span class="prelude-val">Ok</span>(Value::String(encoded))
 }
 
 <span class="doccomment">/// Escapes quote characters
 </span><span class="kw">pub fn </span>addslashes(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;addslashes&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.replace(<span class="string">&quot;\\&quot;</span>, <span class="string">&quot;\\\\&quot;</span>).replace(<span class="string">&quot;\&quot;&quot;</span>, <span class="string">&quot;\\\&quot;&quot;</span>).replace(<span class="string">&quot;\&#39;&quot;</span>, <span class="string">&quot;\\\&#39;&quot;</span>)).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(s.replace(<span class="string">&#39;\\&#39;</span>, <span class="string">&quot;\\\\&quot;</span>).replace(<span class="string">&#39;\&quot;&#39;</span>, <span class="string">&quot;\\\&quot;&quot;</span>).replace(<span class="string">&#39;\&#39;&#39;</span>, <span class="string">&quot;\\\&#39;&quot;</span>)).unwrap())
 }
 
 <span class="doccomment">/// Transform a string into a slug
 </span><span class="attr">#[cfg(feature = <span class="string">&quot;builtins&quot;</span>)]
 </span><span class="kw">pub fn </span>slugify(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;slugify&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>slug::slugify(s)).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(slug::slugify(s)).unwrap())
 }
 
 <span class="doccomment">/// Capitalizes each word in the string
 </span><span class="kw">pub fn </span>title(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;title&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
 
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>WORDS_RE.replace_all(<span class="kw-2">&amp;</span>s, |caps: <span class="kw-2">&amp;</span>Captures| {
+    <span class="prelude-val">Ok</span>(to_value(WORDS_RE.replace_all(<span class="kw-2">&amp;</span>s, |caps: <span class="kw-2">&amp;</span>Captures| {
         <span class="kw">let </span>first = caps[<span class="string">&quot;first&quot;</span>].to_uppercase();
         <span class="kw">let </span>rest = caps[<span class="string">&quot;rest&quot;</span>].to_lowercase();
         <span class="macro">format!</span>(<span class="string">&quot;{}{}&quot;</span>, first, rest)
@@ -1124,20 +1195,71 @@
 ///
 /// Example: The input &quot;Hello\nWorld&quot; turns into &quot;Hello&lt;br&gt;World&quot;.
 </span><span class="kw">pub fn </span>linebreaksbr(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
-    <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;title&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>s.replace(<span class="string">&quot;\r\n&quot;</span>, <span class="string">&quot;&lt;br&gt;&quot;</span>).replace(<span class="string">&quot;\n&quot;</span>, <span class="string">&quot;&lt;br&gt;&quot;</span>)).unwrap())
+    <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;linebreaksbr&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
+    <span class="prelude-val">Ok</span>(to_value(s.replace(<span class="string">&quot;\r\n&quot;</span>, <span class="string">&quot;&lt;br&gt;&quot;</span>).replace(<span class="string">&#39;\n&#39;</span>, <span class="string">&quot;&lt;br&gt;&quot;</span>)).unwrap())
+}
+
+<span class="doccomment">/// Indents a string by the specified width.
+///
+/// # Arguments
+///
+/// * `value`   - The string to indent.
+/// * `args`    - A set of key/value arguments that can take the following
+///   keys.
+/// * `prefix`  - The prefix used for indentation. The default value is 4 spaces.
+/// * `first`  - True indents the first line.  The default is false.
+/// * `blank`  - True indents blank lines.  The default is false.
+///
+</span><span class="kw">pub fn </span>indent(value: <span class="kw-2">&amp;</span>Value, args: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
+    <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;indent&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
+
+    <span class="kw">let </span>prefix = <span class="kw">match </span>args.get(<span class="string">&quot;prefix&quot;</span>) {
+        <span class="prelude-val">Some</span>(p) =&gt; <span class="macro">try_get_value!</span>(<span class="string">&quot;indent&quot;</span>, <span class="string">&quot;prefix&quot;</span>, String, p),
+        <span class="prelude-val">None </span>=&gt; <span class="string">&quot;    &quot;</span>.to_string(),
+    };
+    <span class="kw">let </span>first = <span class="kw">match </span>args.get(<span class="string">&quot;first&quot;</span>) {
+        <span class="prelude-val">Some</span>(f) =&gt; <span class="macro">try_get_value!</span>(<span class="string">&quot;indent&quot;</span>, <span class="string">&quot;first&quot;</span>, bool, f),
+        <span class="prelude-val">None </span>=&gt; <span class="bool-val">false</span>,
+    };
+    <span class="kw">let </span>blank = <span class="kw">match </span>args.get(<span class="string">&quot;blank&quot;</span>) {
+        <span class="prelude-val">Some</span>(b) =&gt; <span class="macro">try_get_value!</span>(<span class="string">&quot;indent&quot;</span>, <span class="string">&quot;blank&quot;</span>, bool, b),
+        <span class="prelude-val">None </span>=&gt; <span class="bool-val">false</span>,
+    };
+
+    <span class="comment">// Attempt to pre-allocate enough space to prevent additional allocations/copies
+    </span><span class="kw">let </span><span class="kw-2">mut </span>out = String::with_capacity(
+        s.len() + (prefix.len() * (s.chars().filter(|<span class="kw-2">&amp;</span>c| c == <span class="string">&#39;\n&#39;</span>).count() + <span class="number">1</span>)),
+    );
+    <span class="kw">let </span><span class="kw-2">mut </span>first_pass = <span class="bool-val">true</span>;
+
+    <span class="kw">for </span>line <span class="kw">in </span>s.lines() {
+        <span class="kw">if </span>first_pass {
+            <span class="kw">if </span>first {
+                out.push_str(<span class="kw-2">&amp;</span>prefix);
+            }
+            first_pass = <span class="bool-val">false</span>;
+        } <span class="kw">else </span>{
+            out.push(<span class="string">&#39;\n&#39;</span>);
+            <span class="kw">if </span>blank || !line.trim_start().is_empty() {
+                out.push_str(<span class="kw-2">&amp;</span>prefix);
+            }
+        }
+        out.push_str(line);
+    }
+
+    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>out).unwrap())
 }
 
 <span class="doccomment">/// Removes html tags from string
 </span><span class="kw">pub fn </span>striptags(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;striptags&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>STRIPTAGS_RE.replace_all(<span class="kw-2">&amp;</span>s, <span class="string">&quot;&quot;</span>)).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(STRIPTAGS_RE.replace_all(<span class="kw-2">&amp;</span>s, <span class="string">&quot;&quot;</span>)).unwrap())
 }
 
 <span class="doccomment">/// Removes spaces between html tags from string
 </span><span class="kw">pub fn </span>spaceless(value: <span class="kw-2">&amp;</span>Value, <span class="kw">_</span>: <span class="kw-2">&amp;</span>HashMap&lt;String, Value&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Value&gt; {
     <span class="kw">let </span>s = <span class="macro">try_get_value!</span>(<span class="string">&quot;spaceless&quot;</span>, <span class="string">&quot;value&quot;</span>, String, value);
-    <span class="prelude-val">Ok</span>(to_value(<span class="kw-2">&amp;</span>SPACELESS_RE.replace_all(<span class="kw-2">&amp;</span>s, <span class="string">&quot;&gt;&lt;&quot;</span>)).unwrap())
+    <span class="prelude-val">Ok</span>(to_value(SPACELESS_RE.replace_all(<span class="kw-2">&amp;</span>s, <span class="string">&quot;&gt;&lt;&quot;</span>)).unwrap())
 }
 
 <span class="doccomment">/// Returns the given text with all special HTML characters encoded
@@ -1273,7 +1395,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_upper_error() {
-        <span class="kw">let </span>result = upper(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="number">50</span>).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = upper(<span class="kw-2">&amp;</span>to_value(<span class="number">50</span>).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(
             result.err().unwrap().to_string(),
@@ -1337,7 +1459,7 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_truncate_smaller_than_length() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="number">255</span>).unwrap());
+        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="number">255</span>).unwrap());
         <span class="kw">let </span>result = truncate(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;hello&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;hello&quot;</span>).unwrap());
@@ -1346,7 +1468,7 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_truncate_when_required() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="number">2</span>).unwrap());
+        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="number">2</span>).unwrap());
         <span class="kw">let </span>result = truncate(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;日本語&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;日本…&quot;</span>).unwrap());
@@ -1355,8 +1477,8 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_truncate_custom_end() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="number">2</span>).unwrap());
-        args.insert(<span class="string">&quot;end&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="number">2</span>).unwrap());
+        args.insert(<span class="string">&quot;end&quot;</span>.to_string(), to_value(<span class="string">&quot;&quot;</span>).unwrap());
         <span class="kw">let </span>result = truncate(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;日本語&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;日本&quot;</span>).unwrap());
@@ -1365,8 +1487,8 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_truncate_multichar_grapheme() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="number">5</span>).unwrap());
-        args.insert(<span class="string">&quot;end&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;…&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;length&quot;</span>.to_string(), to_value(<span class="number">5</span>).unwrap());
+        args.insert(<span class="string">&quot;end&quot;</span>.to_string(), to_value(<span class="string">&quot;…&quot;</span>).unwrap());
         <span class="kw">let </span>result = truncate(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;👨‍👩‍👧‍👦 family&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;👨‍👩‍👧‍👦 fam…&quot;</span>).unwrap());
@@ -1383,15 +1505,15 @@
     </span><span class="kw">fn </span>test_wordcount() {
         <span class="kw">let </span>result = wordcount(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;Joel is a slug&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="number">4</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="number">4</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_replace() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Hello&quot;</span>).unwrap());
-        args.insert(<span class="string">&quot;to&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Goodbye&quot;</span>).unwrap());
-        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Hello world!&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
+        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="string">&quot;Hello&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;to&quot;</span>.to_string(), to_value(<span class="string">&quot;Goodbye&quot;</span>).unwrap());
+        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;Hello world!&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;Goodbye world!&quot;</span>).unwrap());
     }
@@ -1400,9 +1522,9 @@
     </span><span class="attr">#[test]
     </span><span class="kw">fn </span>test_replace_newline() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;\n&quot;</span>).unwrap());
-        args.insert(<span class="string">&quot;to&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;&lt;br&gt;&quot;</span>).unwrap());
-        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Animal Alphabets\nB is for Bee-Eater&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
+        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="string">&quot;\n&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;to&quot;</span>.to_string(), to_value(<span class="string">&quot;&lt;br&gt;&quot;</span>).unwrap());
+        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;Animal Alphabets\nB is for Bee-Eater&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;Animal Alphabets&lt;br&gt;B is for Bee-Eater&quot;</span>).unwrap());
     }
@@ -1410,8 +1532,8 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_replace_missing_arg() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Hello&quot;</span>).unwrap());
-        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Hello world!&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
+        args.insert(<span class="string">&quot;from&quot;</span>.to_string(), to_value(<span class="string">&quot;Hello&quot;</span>).unwrap());
+        <span class="kw">let </span>result = replace(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;Hello world!&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_err());
         <span class="macro">assert_eq!</span>(
             result.err().unwrap().to_string(),
@@ -1528,12 +1650,32 @@
             (<span class="string">&quot;\tfoo\tbar\t&quot;</span>, <span class="string">&quot;\tFoo\tBar\t&quot;</span>),
             (<span class="string">&quot;foo bar &quot;</span>, <span class="string">&quot;Foo Bar &quot;</span>),
             (<span class="string">&quot;foo bar\t&quot;</span>, <span class="string">&quot;Foo Bar\t&quot;</span>),
+            (<span class="string">&quot;foo&#39;s bar&quot;</span>, <span class="string">&quot;Foo&#39;s Bar&quot;</span>),
         ];
         <span class="kw">for </span>(input, expected) <span class="kw">in </span>tests {
             <span class="kw">let </span>result = title(<span class="kw-2">&amp;</span>to_value(input).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
             <span class="macro">assert!</span>(result.is_ok());
             <span class="macro">assert_eq!</span>(result.unwrap(), to_value(expected).unwrap());
         }
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_indent_defaults() {
+        <span class="kw">let </span>args = HashMap::new();
+        <span class="kw">let </span>result = indent(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;one\n\ntwo\nthree&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;one\n\n    two\n    three&quot;</span>).unwrap());
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_indent_args() {
+        <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
+        args.insert(<span class="string">&quot;first&quot;</span>.to_string(), to_value(<span class="bool-val">true</span>).unwrap());
+        args.insert(<span class="string">&quot;prefix&quot;</span>.to_string(), to_value(<span class="string">&quot; &quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;blank&quot;</span>.to_string(), to_value(<span class="bool-val">true</span>).unwrap());
+        <span class="kw">let </span>result = indent(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;one\n\ntwo\nthree&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot; one\n \n two\n three&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
@@ -1702,10 +1844,10 @@
             <span class="macro">assert_eq!</span>(result.unwrap(), to_value(expected).unwrap());
         }
 
-        args.insert(<span class="string">&quot;default&quot;</span>.to_string(), to_value(<span class="number">3.14</span>).unwrap());
+        args.insert(<span class="string">&quot;default&quot;</span>.to_string(), to_value(<span class="number">3.18</span>).unwrap());
         <span class="kw">let </span>result = float(<span class="kw-2">&amp;</span>to_value(<span class="string">&quot;bad_val&quot;</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="number">3.14</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="number">3.18</span>).unwrap());
 
         <span class="kw">let </span>result = float(<span class="kw-2">&amp;</span>to_value(<span class="number">1.23</span>).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());

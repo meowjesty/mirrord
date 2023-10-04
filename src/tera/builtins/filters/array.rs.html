@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.17.1/src/builtins/filters/array.rs`."><title>array.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../tera/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/github/home/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tera-1.19.1/src/builtins/filters/array.rs`."><title>array.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-47e7ab555ef2818a.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tera" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (e3abbd499 2023-09-06)" data-channel="nightly" data-search-js="search-5d3eaacf19ebf04f.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-f194925aa375ae96.css" data-theme-dark-css="dark-1dd4d1ce031e15de.css" data-theme-ayu-css="ayu-49e58d069f567085.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-ef3a2de404864b0b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-f194925aa375ae96.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-1dd4d1ce031e15de.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../tera/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -824,21 +824,10 @@
 <a href="#824" id="824">824</a>
 <a href="#825" id="825">825</a>
 <a href="#826" id="826">826</a>
-<a href="#827" id="827">827</a>
-<a href="#828" id="828">828</a>
-<a href="#829" id="829">829</a>
-<a href="#830" id="830">830</a>
-<a href="#831" id="831">831</a>
-<a href="#832" id="832">832</a>
-<a href="#833" id="833">833</a>
-<a href="#834" id="834">834</a>
-<a href="#835" id="835">835</a>
-<a href="#836" id="836">836</a>
-<a href="#837" id="837">837</a>
 </pre></div><pre class="rust"><code><span class="doccomment">/// Filters operating on array
 </span><span class="kw">use </span>std::collections::HashMap;
 
-<span class="kw">use </span><span class="kw">crate</span>::context::{get_json_pointer, ValueRender};
+<span class="kw">use </span><span class="kw">crate</span>::context::{dotted_pointer, ValueRender};
 <span class="kw">use </span><span class="kw">crate</span>::errors::{Error, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span><span class="kw">crate</span>::filter_utils::{get_sort_strategy_for_type, get_unique_strategy_for_type};
 <span class="kw">use </span><span class="kw">crate</span>::utils::render_to_string;
@@ -896,7 +885,7 @@
         .iter()
         .map(|v| render_to_string(|| <span class="string">&quot;joining array&quot;</span>.to_string(), |w| v.render(w)))
         .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
-    to_value(<span class="kw-2">&amp;</span>rendered.join(<span class="kw-2">&amp;</span>sep)).map_err(Error::json)
+    to_value(rendered.join(<span class="kw-2">&amp;</span>sep)).map_err(Error::json)
 }
 
 <span class="doccomment">/// Sorts the array in ascending order.
@@ -911,18 +900,14 @@
         <span class="prelude-val">Some</span>(val) =&gt; <span class="macro">try_get_value!</span>(<span class="string">&quot;sort&quot;</span>, <span class="string">&quot;attribute&quot;</span>, String, val),
         <span class="prelude-val">None </span>=&gt; String::new(),
     };
-    <span class="kw">let </span>ptr = <span class="kw">match </span>attribute.as_str() {
-        <span class="string">&quot;&quot; </span>=&gt; <span class="string">&quot;&quot;</span>.to_string(),
-        s =&gt; get_json_pointer(s),
-    };
 
-    <span class="kw">let </span>first = arr[<span class="number">0</span>].pointer(<span class="kw-2">&amp;</span>ptr).ok_or_else(|| {
+    <span class="kw">let </span>first = dotted_pointer(<span class="kw-2">&amp;</span>arr[<span class="number">0</span>], <span class="kw-2">&amp;</span>attribute).ok_or_else(|| {
         Error::msg(<span class="macro">format!</span>(<span class="string">&quot;attribute &#39;{}&#39; does not reference a field&quot;</span>, attribute))
     })<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>strategy = get_sort_strategy_for_type(first)<span class="question-mark">?</span>;
     <span class="kw">for </span>v <span class="kw">in </span><span class="kw-2">&amp;</span>arr {
-        <span class="kw">let </span>key = v.pointer(<span class="kw-2">&amp;</span>ptr).ok_or_else(|| {
+        <span class="kw">let </span>key = dotted_pointer(v, <span class="kw-2">&amp;</span>attribute).ok_or_else(|| {
             Error::msg(<span class="macro">format!</span>(<span class="string">&quot;attribute &#39;{}&#39; does not reference a field&quot;</span>, attribute))
         })<span class="question-mark">?</span>;
         strategy.try_add_pair(v, key)<span class="question-mark">?</span>;
@@ -950,12 +935,8 @@
         <span class="prelude-val">Some</span>(val) =&gt; <span class="macro">try_get_value!</span>(<span class="string">&quot;unique&quot;</span>, <span class="string">&quot;attribute&quot;</span>, String, val),
         <span class="prelude-val">None </span>=&gt; String::new(),
     };
-    <span class="kw">let </span>ptr = <span class="kw">match </span>attribute.as_str() {
-        <span class="string">&quot;&quot; </span>=&gt; <span class="string">&quot;&quot;</span>.to_string(),
-        s =&gt; get_json_pointer(s),
-    };
 
-    <span class="kw">let </span>first = arr[<span class="number">0</span>].pointer(<span class="kw-2">&amp;</span>ptr).ok_or_else(|| {
+    <span class="kw">let </span>first = dotted_pointer(<span class="kw-2">&amp;</span>arr[<span class="number">0</span>], <span class="kw-2">&amp;</span>attribute).ok_or_else(|| {
         Error::msg(<span class="macro">format!</span>(<span class="string">&quot;attribute &#39;{}&#39; does not reference a field&quot;</span>, attribute))
     })<span class="question-mark">?</span>;
 
@@ -964,7 +945,7 @@
 
     <span class="kw">let </span>arr = arr
         .into_iter()
-        .filter_map(|v| <span class="kw">match </span>v.pointer(<span class="kw-2">&amp;</span>ptr) {
+        .filter_map(|v| <span class="kw">match </span>dotted_pointer(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>attribute) {
             <span class="prelude-val">Some</span>(key) =&gt; {
                 <span class="kw">if </span>disc == std::mem::discriminant(key) {
                     <span class="kw">match </span>strategy.insert(key) {
@@ -1000,10 +981,9 @@
     };
 
     <span class="kw">let </span><span class="kw-2">mut </span>grouped = Map::new();
-    <span class="kw">let </span>json_pointer = get_json_pointer(<span class="kw-2">&amp;</span>key);
 
     <span class="kw">for </span>val <span class="kw">in </span>arr {
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(key_val) = val.pointer(<span class="kw-2">&amp;</span>json_pointer).cloned() {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(key_val) = dotted_pointer(<span class="kw-2">&amp;</span>val, <span class="kw-2">&amp;</span>key).cloned() {
             <span class="kw">if </span>key_val.is_null() {
                 <span class="kw">continue</span>;
             }
@@ -1040,11 +1020,10 @@
     };
     <span class="kw">let </span>value = args.get(<span class="string">&quot;value&quot;</span>).unwrap_or(<span class="kw-2">&amp;</span>Value::Null);
 
-    <span class="kw">let </span>json_pointer = get_json_pointer(<span class="kw-2">&amp;</span>key);
     arr = arr
         .into_iter()
         .filter(|v| {
-            <span class="kw">let </span>val = v.pointer(<span class="kw-2">&amp;</span>json_pointer).unwrap_or(<span class="kw-2">&amp;</span>Value::Null);
+            <span class="kw">let </span>val = dotted_pointer(v, <span class="kw-2">&amp;</span>key).unwrap_or(<span class="kw-2">&amp;</span>Value::Null);
             <span class="kw">if </span>value.is_null() {
                 !val.is_null()
             } <span class="kw">else </span>{
@@ -1069,10 +1048,9 @@
         <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(Error::msg(<span class="string">&quot;The `map` filter has to have an `attribute` argument&quot;</span>)),
     };
 
-    <span class="kw">let </span>json_pointer = get_json_pointer(<span class="kw-2">&amp;</span>attribute);
     <span class="kw">let </span>arr = arr
         .into_iter()
-        .filter_map(|v| <span class="kw">match </span>v.pointer(<span class="kw-2">&amp;</span>json_pointer) {
+        .filter_map(|v| <span class="kw">match </span>dotted_pointer(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>attribute) {
             <span class="prelude-val">Some</span>(val) <span class="kw">if </span>!val.is_null() =&gt; <span class="prelude-val">Some</span>(val.clone()),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         })
@@ -1160,9 +1138,9 @@
     </span><span class="kw">fn </span>test_nth() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
         args.insert(<span class="string">&quot;n&quot;</span>.to_string(), to_value(<span class="number">1</span>).unwrap());
-        <span class="kw">let </span>result = nth(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="kw">let </span>result = nth(<span class="kw-2">&amp;</span>to_value(<span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="number">2</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="number">2</span>).unwrap());
     }
 
     <span class="attr">#[test]
@@ -1170,30 +1148,30 @@
         <span class="kw">let </span>v: Vec&lt;Value&gt; = Vec::new();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
         args.insert(<span class="string">&quot;n&quot;</span>.to_string(), to_value(<span class="number">1</span>).unwrap());
-        <span class="kw">let </span>result = nth(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span>v).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="kw">let </span>result = nth(<span class="kw-2">&amp;</span>to_value(v).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_first() {
-        <span class="kw">let </span>result = first(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = first(<span class="kw-2">&amp;</span>to_value(<span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="number">1</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="number">1</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_first_empty() {
         <span class="kw">let </span>v: Vec&lt;Value&gt; = Vec::new();
 
-        <span class="kw">let </span>result = first(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span>v).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = first(<span class="kw-2">&amp;</span>to_value(v).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.ok().unwrap(), to_value(<span class="string">&quot;&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_last() {
-        <span class="kw">let </span>result = last(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="string">&quot;Hello&quot;</span>, <span class="string">&quot;World&quot;</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = last(<span class="kw-2">&amp;</span>to_value(<span class="macro">vec!</span>[<span class="string">&quot;Hello&quot;</span>, <span class="string">&quot;World&quot;</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;World&quot;</span>).unwrap());
     }
@@ -1202,7 +1180,7 @@
     </span><span class="kw">fn </span>test_last_empty() {
         <span class="kw">let </span>v: Vec&lt;Value&gt; = Vec::new();
 
-        <span class="kw">let </span>result = last(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span>v).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = last(<span class="kw-2">&amp;</span>to_value(v).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
         <span class="macro">assert_eq!</span>(result.ok().unwrap(), to_value(<span class="string">&quot;&quot;</span>).unwrap());
     }
@@ -1210,29 +1188,29 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_join_sep() {
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;sep&quot;</span>.to_owned(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;==&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;sep&quot;</span>.to_owned(), to_value(<span class="string">&quot;==&quot;</span>).unwrap());
 
-        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="string">&quot;Cats&quot;</span>, <span class="string">&quot;Dogs&quot;</span>]).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(<span class="macro">vec!</span>[<span class="string">&quot;Cats&quot;</span>, <span class="string">&quot;Dogs&quot;</span>]).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;Cats==Dogs&quot;</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;Cats==Dogs&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_join_sep_omitted() {
-        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="number">1.2</span>, <span class="number">3.4</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
+        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(<span class="macro">vec!</span>[<span class="number">1.2</span>, <span class="number">3.4</span>]).unwrap(), <span class="kw-2">&amp;</span>HashMap::new());
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;1.23.4&quot;</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;1.23.4&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_join_empty() {
         <span class="kw">let </span>v: Vec&lt;Value&gt; = Vec::new();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;sep&quot;</span>.to_owned(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;==&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;sep&quot;</span>.to_owned(), to_value(<span class="string">&quot;==&quot;</span>).unwrap());
 
-        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(<span class="kw-2">&amp;</span>v).unwrap(), <span class="kw-2">&amp;</span>args);
+        <span class="kw">let </span>result = join(<span class="kw-2">&amp;</span>to_value(v).unwrap(), <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
-        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;&quot;</span>).unwrap());
+        <span class="macro">assert_eq!</span>(result.unwrap(), to_value(<span class="string">&quot;&quot;</span>).unwrap());
     }
 
     <span class="attr">#[test]
@@ -1269,7 +1247,7 @@
         ])
         .unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;a&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="string">&quot;a&quot;</span>).unwrap());
 
         <span class="kw">let </span>result = sort(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
@@ -1289,7 +1267,7 @@
     </span><span class="kw">fn </span>test_sort_invalid_attribute() {
         <span class="kw">let </span>v = to_value(<span class="macro">vec!</span>[Foo { a: <span class="number">3</span>, b: <span class="number">5 </span>}]).unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;invalid_field&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="string">&quot;invalid_field&quot;</span>).unwrap());
 
         <span class="kw">let </span>result = sort(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_err());
@@ -1394,7 +1372,7 @@
         ])
         .unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;a&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="string">&quot;a&quot;</span>).unwrap());
 
         <span class="kw">let </span>result = unique(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_ok());
@@ -1408,7 +1386,7 @@
     </span><span class="kw">fn </span>test_unique_invalid_attribute() {
         <span class="kw">let </span>v = to_value(<span class="macro">vec!</span>[Foo { a: <span class="number">3</span>, b: <span class="number">5 </span>}]).unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>args = HashMap::new();
-        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="kw-2">&amp;</span><span class="string">&quot;invalid_field&quot;</span>).unwrap());
+        args.insert(<span class="string">&quot;attribute&quot;</span>.to_string(), to_value(<span class="string">&quot;invalid_field&quot;</span>).unwrap());
 
         <span class="kw">let </span>result = unique(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>args);
         <span class="macro">assert!</span>(result.is_err());

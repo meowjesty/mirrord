@@ -17,7 +17,7 @@ lifetime of its needle.</p>
 borrows the needle.</p>
 <p>If this is already an owned finder, then this is a no-op. Otherwise,
 this copies the needle.</p>
-<p>This is only available when the <code>std</code> feature is enabled.</p>
+<p>This is only available when the <code>alloc</code> feature is enabled.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.needle" class="method"><a class="src rightside" href="../src/bstr/ext_slice.rs.html#3123-3125">source</a><h4 class="code-header">pub fn <a href="#method.needle" class="fn">needle</a>(&amp;self) -&gt; &amp;[<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a>] <a href="#" class="tooltip" data-notable-ty="&amp;[u8]">ⓘ</a></h4></section></summary><div class="docblock"><p>Returns the needle that this finder searches for.</p>
 <p>Note that the lifetime of the needle returned is tied to the lifetime
 of the finder, and may be shorter than the <code>'a</code> lifetime. Namely, a

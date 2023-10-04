@@ -776,6 +776,24 @@
 <a href="#776" id="776">776</a>
 <a href="#777" id="777">777</a>
 <a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
 </pre></div><pre class="rust"><code><span class="attr">#![feature(slice_concat_trait)]
 #![feature(lazy_cell)]
 #![feature(result_option_inspect)]
@@ -1101,6 +1119,10 @@
     /// We don&#39;t call it from `from_env` since we want to verify it only once (from cli)
     ///
     /// Fills `context` with the warnings.
+    ///
+    /// - `ide`: Identifies if this is being called from an IDE context, when using
+    /// `mirrord verify-config`. Turns some _target missing_ errors into warnings, as the target can
+    /// be selected after `verify-config` is run.
     </span><span class="kw">pub fn </span>verify(<span class="kw-2">&amp;</span><span class="self">self</span>, context: <span class="kw-2">&amp;mut </span>ConfigContext) -&gt; <span class="prelude-ty">Result</span>&lt;(), ConfigError&gt; {
         <span class="kw">if </span><span class="self">self</span>.pause {
             <span class="kw">if </span><span class="self">self</span>.agent.ephemeral &amp;&amp; !<span class="self">self</span>.agent.privileged {
@@ -1135,8 +1157,9 @@
         {
             <span class="prelude-val">Err</span>(ConfigError::Conflict(
                 <span class="string">&quot;Cannot use both HTTP header filter and path filter at the same time&quot;</span>.to_string(),
-            ))<span class="question-mark">?</span>;
-        }
+            ))<span class="question-mark">?
+        </span>}
+
         <span class="kw">if </span><span class="self">self
             </span>.feature
             .network
@@ -1159,25 +1182,37 @@
                     .header_filter
                     .is_some())
         {
-            <span class="prelude-val">Err</span>(ConfigError::Conflict(<span class="string">&quot;Cannot use old http filter and new http filter at the same time. Use only `http_filter` instead of `http_header_filter`&quot;</span>.to_string()))<span class="question-mark">?</span>;
-        }
-        <span class="kw">if </span><span class="self">self</span>.target.path.is_none() {
-            <span class="kw">if </span><span class="self">self</span>.target.namespace.is_some() {
-                <span class="prelude-val">Err</span>(ConfigError::TargetNamespaceWithoutTarget)<span class="question-mark">?</span>;
-            }
+            <span class="prelude-val">Err</span>(ConfigError::Conflict(<span class="string">&quot;Cannot use old http filter and new http filter at the same time. Use only `http_filter` instead of `http_header_filter`&quot;</span>.to_string()))<span class="question-mark">?
+        </span>}
+
+        <span class="kw">if </span><span class="self">self</span>.target.path.is_none() &amp;&amp; !context.ide {
+            <span class="comment">// In the IDE, a target may be selected after `mirrord verify-config` is run, so we
+            // for this case we treat these as warnings. They&#39;ll become errors once mirrord proper
+            // tries to start (if the user somehow managed to not select a target by then).
+            </span><span class="kw">if </span><span class="self">self</span>.target.namespace.is_some() {
+                <span class="prelude-val">Err</span>(ConfigError::TargetNamespaceWithoutTarget)<span class="question-mark">?
+            </span>}
+
             <span class="kw">if </span><span class="self">self</span>.feature.network.incoming.is_steal() {
-                context.add_warning(<span class="string">&quot;Steal mode is not compatible with a targetless agent, please either disable this option or specify a target.&quot;</span>.into());
-            }
+                <span class="prelude-val">Err</span>(ConfigError::Conflict(<span class="string">&quot;Steal mode is not compatible with a targetless agent, please either disable this option or specify a target.&quot;</span>.into()))<span class="question-mark">?
+            </span>}
+
             <span class="kw">if </span><span class="self">self</span>.agent.ephemeral {
                 <span class="prelude-val">Err</span>(ConfigError::Conflict(
-                    <span class="string">&quot;Using an ephemeral container for the agent is not compatible with a targetless agent, please either disable this option or specify a target.&quot;</span>.into(),
-                ))<span class="question-mark">?</span>;
-            }
+                    <span class="string">&quot;Using an ephemeral container for the agent is not \
+                         compatible with a targetless agent, please either disable this option or \
+                        specify a target.&quot;
+                        </span>.into(),
+                ))<span class="question-mark">?
+            </span>}
+
             <span class="kw">if </span><span class="self">self</span>.pause {
                 <span class="prelude-val">Err</span>(ConfigError::Conflict(
-                    <span class="string">&quot;The target pause feature is not compatible with a targetless agent, please either disable this option or specify a target.&quot;</span>.into(),
-                ))<span class="question-mark">?</span>;
-            }
+                    <span class="string">&quot;The target pause feature is not compatible with a \
+                        targetless agent, please either disable this option or specify a target.&quot;
+                        </span>.into(),
+                ))<span class="question-mark">?
+            </span>}
         }
         <span class="prelude-val">Ok</span>(())
     }
@@ -1430,6 +1465,7 @@
                 disabled_capabilities: <span class="prelude-val">None</span>,
                 tolerations: <span class="prelude-val">None</span>,
                 check_out_of_pods: <span class="prelude-val">None</span>,
+                resources: <span class="prelude-val">None</span>,
             }),
             feature: <span class="prelude-val">Some</span>(FeatureFileConfig {
                 env: ToggleableConfig::Enabled(<span class="bool-val">true</span>).into(),

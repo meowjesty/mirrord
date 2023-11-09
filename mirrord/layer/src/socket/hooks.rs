@@ -1,31 +1,25 @@
 use alloc::ffi::CString;
 use core::{cmp, ffi::CStr, mem};
 use std::{
-    mem::size_of,
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr},
     os::unix::io::RawFd,
     ptr,
-    sync::{LazyLock, Mutex},
+    sync::LazyLock,
 };
 
 use dashmap::DashSet;
 use errno::{set_errno, Errno};
-use libc::{
-    c_char, c_int, c_void, hostent, in_addr, size_t, sockaddr, socklen_t, ssize_t, AF_INET, EINVAL,
-};
+use libc::{c_char, c_int, c_void, hostent, size_t, sockaddr, socklen_t, ssize_t, AF_INET, EINVAL};
 use mirrord_layer_macro::{hook_fn, hook_guard_fn};
 
 use super::ops::*;
-use crate::{
-    detour::{Detour, DetourGuard},
-    hooks::HookManager,
-    replace,
-};
+use crate::{detour::DetourGuard, hooks::HookManager, replace};
 
 /// Here we keep addr infos that we allocated so we'll know when to use the original
 /// freeaddrinfo function and when to use our implementation
 pub(crate) static MANAGED_ADDRINFO: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
 
+static mut F_GLOBAL_HOSTENT: Option<Hostent> = None;
 static mut GLOBAL_HOSTENT: hostent = hostent {
     h_name: ptr::null_mut(),
     h_aliases: ptr::null_mut(),
@@ -36,13 +30,9 @@ static mut GLOBAL_HOSTENT: hostent = hostent {
 
 static mut GLOBAL_HOSTNAME: Option<Vec<u8>> = None;
 
-pub static mut HOST_ALIASES: Option<Vec<Vec<u8>>> = None;
-static mut _HOST_ALIASES: Option<Vec<*mut i8>> = None;
 pub static mut GLOBAL_HOST_ADDR: Option<IpAddr> = None;
 pub static mut HOST_ADDR_LIST: [*mut c_char; 2] = [ptr::null_mut(); 2];
 pub static mut _HOST_ADDR_LIST: [u8; 4] = [0u8; 4];
-static mut H_POS: usize = 0;
-pub static mut HOST_STAYOPEN: c_int = 0;
 
 #[hook_guard_fn]
 pub(crate) unsafe extern "C" fn socket_detour(
@@ -138,61 +128,74 @@ pub(crate) unsafe extern "C" fn gethostname_detour(
         .unwrap_or_bypass_with(|_| FN_GETHOSTNAME(raw_name, name_length))
 }
 
+struct Hostent {
+    hostname_bytes: Vec<u8>,
+    ips_octets: Vec<[u8; 4]>,
+    null_aliases: Vec<*mut c_char>,
+    null_addr_list: [*mut c_char; 2],
+    raw_hostent: hostent,
+}
+
+impl Hostent {
+    fn new(hostname: Option<String>, ipv4s: Vec<Ipv4Addr>) -> Option<Self> {
+        let mut hostname_bytes = hostname?.into_bytes();
+        let ips_octets = ipv4s.into_iter().map(|ip| ip.octets()).collect::<Vec<_>>();
+
+        let mut host_aliases: Vec<*mut c_char> = vec![ptr::null_mut(), ptr::null_mut()];
+
+        let empty_host_address_list = [0u8; 4];
+        let mut host_address_list = vec![empty_host_address_list];
+        let mut null_addr_list = [ptr::null_mut(); 2];
+
+        let h_name = hostname_bytes.as_mut_ptr().cast();
+        let h_aliases = host_aliases.as_mut_ptr();
+
+        let result = Hostent {
+            hostname_bytes,
+            ips_octets,
+            null_aliases: host_aliases,
+            null_addr_list,
+            raw_hostent: hostent {
+                h_name,
+                h_aliases,
+                h_addrtype: AF_INET,
+                h_length: 4,
+                h_addr_list: null_addr_list.as_mut_ptr(),
+            },
+        };
+
+        Some(result)
+    }
+}
+
 #[hook_guard_fn]
 unsafe extern "C" fn gethostbyname_detour(name: *const c_char) -> *const hostent {
     let rawish_name = (!name.is_null()).then(|| CStr::from_ptr(name));
-
-    // TODO(alex): Do we need ai_canonname hint?
-    // let mut hints = mem::zeroed::<addrinfo>();
-    // hints.ai_flags |= AI_CANONNAME;
 
     let hostent_result = remote_getaddrinfo(rawish_name.unwrap().to_string_lossy().into_owned())
         .map(|addr_list| {
             let mut list_of_addresses: Vec<*mut c_char> = Vec::new();
 
-            let (host, ip) = addr_list.into_iter().find(|(_, ip)| ip.is_ipv4()).unwrap();
+            let (hostnames, ipv4s): (Vec<_>, Vec<_>) = addr_list
+                .into_iter()
+                .filter_map(|(hostname, ip)| match ip {
+                    IpAddr::V4(ipv4) => Some((hostname, ipv4)),
+                    IpAddr::V6(_) => None,
+                })
+                .unzip();
 
-            let host_name: Vec<u8> = host.into_bytes();
-            GLOBAL_HOSTNAME = Some(host_name);
+            // &mut GLOBAL_HOSTENT as *mut hostent
+            F_GLOBAL_HOSTENT = Hostent::new(hostnames.first().cloned(), ipv4s);
 
-            let ip_bytes = match ip {
-                IpAddr::V4(ip4) => ip4.octets(),
-                _ => panic!("kaboom"),
-            };
-            _HOST_ADDR_LIST = ip_bytes;
-            HOST_ADDR_LIST = [_HOST_ADDR_LIST.as_mut_ptr() as *mut c_char, ptr::null_mut()];
-            GLOBAL_HOST_ADDR = Some(ip);
-
-            //TODO actually get aliases
-            let mut _host_aliases: Vec<Vec<u8>> = Vec::new();
-            _host_aliases.push(vec![b'\0']);
-            let mut host_aliases: Vec<*mut i8> = Vec::new();
-            host_aliases.push(ptr::null_mut());
-            host_aliases.push(ptr::null_mut());
-            HOST_ALIASES = Some(_host_aliases);
-
-            GLOBAL_HOSTENT = hostent {
-                h_name: GLOBAL_HOSTNAME.as_mut().unwrap().as_mut_ptr() as *mut c_char,
-                h_aliases: host_aliases.as_mut_slice().as_mut_ptr() as *mut *mut i8,
-                h_addrtype: AF_INET,
-                h_length: 4,
-                h_addr_list: HOST_ADDR_LIST.as_mut_ptr(),
-            };
-
-            &mut GLOBAL_HOSTENT as *mut hostent
+            if let Some(hostent) = F_GLOBAL_HOSTENT.as_mut() {
+                &mut hostent.raw_hostent as *mut hostent
+            } else {
+                panic!("kaboom");
+            }
         });
 
     tracing::debug!("result {hostent_result:?}");
     hostent_result.unwrap()
-
-    // match hostent_result {
-    //     Detour::Success(hostent) => {
-    //         tracing::info!("we have success!");
-    //         hostent
-    //     }
-    //     Detour::Bypass(_) => FN_GETHOSTBYNAME(name),
-    //     Detour::Error(_) => core::ptr::null(),
-    // }
 }
 
 #[hook_guard_fn]

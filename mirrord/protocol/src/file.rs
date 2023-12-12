@@ -315,11 +315,21 @@ pub struct WriteFileResponse {
     pub written_amount: u64,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, PartialEq, Eq, Clone)]
 pub struct WriteLimitedFileRequest {
     pub remote_fd: u64,
     pub start_from: u64,
     pub write_bytes: Vec<u8>,
+}
+
+impl fmt::Debug for WriteLimitedFileRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WriteLimitedFileRequest")
+            .field("remote_fd", &self.remote_fd)
+            .field("start_from", &self.start_from)
+            .field("write_bytes", &self.write_bytes.len())
+            .finish()
+    }
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]

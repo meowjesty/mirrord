@@ -67,7 +67,7 @@ fn update_ptr_from_bypass(ptr: *const c_char, bypass: Bypass) -> *const c_char {
 
 /// Implementation of open_detour, used in open_detour and openat_detour
 /// We ignore mode in case we don't bypass the call.
-#[tracing::instrument(level = "trace", ret)]
+#[tracing::instrument(level = "debug", ret)]
 unsafe fn open_logic(raw_path: *const c_char, open_flags: c_int, mode: c_int) -> Detour<RawFd> {
     let path = raw_path.checked_into();
     let open_options = OpenOptionsInternalExt::from_flags(open_flags);
@@ -540,6 +540,24 @@ pub(crate) unsafe extern "C" fn pwrite_detour(
 }
 
 #[hook_guard_fn]
+pub(crate) unsafe extern "C" fn pwrite64_detour(
+    fd: RawFd,
+    in_buffer: *const c_void,
+    amount_to_write: size_t,
+    offset: off_t,
+) -> ssize_t {
+    // Convert the given buffer into a u8 slice, upto the amount to write.
+    let casted_in_buffer: &[u8] = slice::from_raw_parts(in_buffer.cast(), amount_to_write);
+
+    pwrite(fd, casted_in_buffer, offset as u64)
+        .map(|write_response| {
+            let WriteFileResponse { written_amount } = write_response;
+            written_amount as ssize_t
+        })
+        .unwrap_or_bypass_with(|_| FN_PWRITE64(fd, in_buffer, amount_to_write, offset))
+}
+
+#[hook_guard_fn]
 pub(crate) unsafe extern "C" fn _pwrite_nocancel_detour(
     fd: RawFd,
     in_buffer: *const c_void,
@@ -847,6 +865,18 @@ unsafe extern "C" fn fstatfs_detour(fd: c_int, out_stat: *mut statfs) -> c_int {
         .unwrap_or_bypass_with(|_| FN_FSTATFS(fd, out_stat))
 }
 
+/// Hook for `libc::fsync`.
+#[hook_guard_fn]
+pub(crate) unsafe extern "C" fn fsync_detour(fd: RawFd) -> c_int {
+    fsync(fd).unwrap_or_bypass_with(|_| FN_FSYNC(fd))
+}
+
+/// Hook for `libc::fdatasync`.
+#[hook_guard_fn]
+pub(crate) unsafe extern "C" fn fdatasync_detour(fd: RawFd) -> c_int {
+    fsync(fd).unwrap_or_bypass_with(|_| FN_FDATASYNC(fd))
+}
+
 // this requires newer libc which we don't link with to support old libc..
 // leaving this in code so we can enable it when libc is updated.
 // #[cfg(target_os = "linux")]
@@ -960,6 +990,13 @@ pub(crate) unsafe fn enable_file_hooks(hook_manager: &mut HookManager) {
     replace!(hook_manager, "pwrite", pwrite_detour, FnPwrite, FN_PWRITE);
     replace!(
         hook_manager,
+        "pwrite64",
+        pwrite64_detour,
+        FnPwrite64,
+        FN_PWRITE64
+    );
+    replace!(
+        hook_manager,
         "_pwrite$NOCANCEL",
         _pwrite_nocancel_detour,
         Fn_pwrite_nocancel,
@@ -973,6 +1010,15 @@ pub(crate) unsafe fn enable_file_hooks(hook_manager: &mut HookManager) {
         faccessat_detour,
         FnFaccessat,
         FN_FACCESSAT
+    );
+
+    replace!(hook_manager, "fsync", fsync_detour, FnFsync, FN_FSYNC);
+    replace!(
+        hook_manager,
+        "fdatasync",
+        fdatasync_detour,
+        FnFdatasync,
+        FN_FDATASYNC
     );
     // this requires newer libc which we don't link with to support old libc..
     // leaving this in code so we can enable it when libc is updated.

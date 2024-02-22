@@ -63,7 +63,7 @@ pub(super) async fn operator_session_kill_all() -> Result<()> {
     sub_progress.print("killing all sessions");
 
     let result = api
-        .delete("active", &DeleteParams::default())
+        .delete_collection(&Default::default(), &Default::default())
         .await
         .map_err(|error| OperatorApiError::KubeError {
             error,
@@ -84,7 +84,7 @@ pub(super) async fn operator_session_kill_one(id: u64) -> Result<()> {
     sub_progress.print("killing session with id {session_id}");
 
     let result = api
-        .delete(&format!("active/{id}"), &DeleteParams::default())
+        .delete(&format!("{id}"), &DeleteParams::default())
         .await
         .map_err(|error| OperatorApiError::KubeError {
             error,

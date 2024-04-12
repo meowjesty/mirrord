@@ -2,7 +2,7 @@ use std::net::AddrParseError;
 
 use thiserror::Error;
 
-pub type Result<T, E = KubeApiError> = std::result::Result<T, E>;
+pub type KubeResult<T, E = KubeApiError> = std::result::Result<T, E>;
 
 #[derive(Debug, Error)]
 pub enum KubeApiError {

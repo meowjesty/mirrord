@@ -20,7 +20,7 @@ use crate::{
         kubernetes::{get_k8s_resource_api, AgentKubernetesConnectInfo},
         runtime::RuntimeData,
     },
-    error::{KubeApiError, Result},
+    error::{KubeApiError, KubeResult},
 };
 
 fn is_ephemeral_container_running(pod: Pod, container_name: &str) -> bool {
@@ -46,7 +46,7 @@ pub async fn create_ephemeral_agent<P, V>(
     runtime_data: &RuntimeData,
     variant: &V,
     progress: &P,
-) -> Result<AgentKubernetesConnectInfo>
+) -> KubeResult<AgentKubernetesConnectInfo>
 where
     P: Progress + Send + Sync,
     V: ContainerVariant<Update = KubeEphemeralContainer>,
@@ -192,7 +192,7 @@ impl ContainerVariant for EphemeralTargetedVariant<'_> {
         self.params
     }
 
-    fn as_update(&self) -> Result<KubeEphemeralContainer> {
+    fn as_update(&self) -> KubeResult<KubeEphemeralContainer> {
         let EphemeralTargetedVariant {
             agent,
             params,

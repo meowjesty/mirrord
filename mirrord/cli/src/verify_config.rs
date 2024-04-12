@@ -5,7 +5,10 @@ use error::Result;
 use mirrord_config::{
     config::{ConfigContext, MirrordConfig},
     feature::FeatureConfig,
-    target::{DeploymentTarget, PodTarget, RolloutTarget, Target, TargetConfig},
+    target::{
+        cronjob::CronJobTarget, deployment::DeploymentTarget, pod::PodTarget,
+        rollout::RolloutTarget, Target, TargetConfig,
+    },
 };
 use serde::Serialize;
 
@@ -29,6 +32,9 @@ enum VerifiedTarget {
     Deployment(DeploymentTarget),
     #[serde(untagged)]
     Rollout(RolloutTarget),
+
+    #[serde(untagged)]
+    CronJob(CronJobTarget),
 }
 
 impl From<Target> for VerifiedTarget {
@@ -38,6 +44,7 @@ impl From<Target> for VerifiedTarget {
             Target::Pod(p) => Self::Pod(p),
             Target::Rollout(r) => Self::Rollout(r),
             Target::Targetless => Self::Targetless,
+            Target::CronJob(c) => Self::CronJob(c),
         }
     }
 }

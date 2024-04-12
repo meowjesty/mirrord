@@ -1,20 +1,27 @@
-use std::{
-    fmt::{self, Display},
-    str::FromStr,
-};
+use core::fmt;
+use std::str::FromStr;
 
 use mirrord_analytics::CollectAnalytics;
 use schemars::{gen::SchemaGenerator, schema::SchemaObject, JsonSchema};
 use serde::{Deserialize, Serialize};
 
+use self::{
+    cronjob::CronJobTarget, deployment::DeploymentTarget, pod::PodTarget, rollout::RolloutTarget,
+};
 use crate::{
     config::{
+        self,
         from_env::{FromEnv, FromEnvWithError},
         source::MirrordConfigSource,
-        ConfigContext, ConfigError, FromMirrordConfig, MirrordConfig, Result,
+        ConfigContext, ConfigError, FromMirrordConfig, MirrordConfig,
     },
     util::string_or_struct_option,
 };
+
+pub mod cronjob;
+pub mod deployment;
+pub mod pod;
+pub mod rollout;
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, JsonSchema)]
 #[serde(untagged, rename_all = "lowercase", deny_unknown_fields)]
@@ -131,14 +138,16 @@ impl FromMirrordConfig for TargetConfig {
 
 impl TargetFileConfig {
     /// Get the target path from the env var, `Ok(None)` if not set, `Err` if invalid value.
-    fn get_target_path_from_env(context: &mut ConfigContext) -> Result<Option<Target>> {
+    fn get_target_path_from_env(context: &mut ConfigContext) -> config::Result<Option<Target>> {
         FromEnvWithError::new("MIRRORD_IMPERSONATED_TARGET")
             .source_value(context)
             .transpose()
     }
 
     /// Get the target namespace from the env var, `Ok(None)` if not set, `Err` if invalid value.
-    fn get_target_namespace_from_env(context: &mut ConfigContext) -> Result<Option<String>> {
+    fn get_target_namespace_from_env(
+        context: &mut ConfigContext,
+    ) -> config::Result<Option<String>> {
         FromEnv::new("MIRRORD_TARGET_NAMESPACE")
             .source_value(context)
             .transpose()
@@ -150,7 +159,7 @@ impl MirrordConfig for TargetFileConfig {
 
     /// Generate the final config object, out of the configuration parsed from a configuration file,
     /// factoring in environment variables (which are also set by the front end - CLI/IDE-plugin).
-    fn generate_config(self, context: &mut ConfigContext) -> Result<Self::Generated> {
+    fn generate_config(self, context: &mut ConfigContext) -> config::Result<Self::Generated> {
         let (path_from_conf_file, namespace_from_conf_file) = match self {
             TargetFileConfig::Simple(path) => (path, None),
             TargetFileConfig::Advanced { path, namespace } => (path, namespace),
@@ -164,7 +173,7 @@ impl MirrordConfig for TargetFileConfig {
 }
 
 trait FromSplit {
-    fn from_split(split: &mut std::str::Split<char>) -> Result<Self>
+    fn from_split(split: &mut std::str::Split<char>) -> config::Result<Self>
     where
         Self: Sized;
 }
@@ -211,17 +220,20 @@ pub enum Target {
 
     /// <!--${internal}-->
     /// Mirror a rollout.
-    Rollout(RolloutTarget),
+    Rollout(rollout::RolloutTarget),
 
     /// <!--${internal}-->
     /// Spawn a new pod.
     Targetless,
+
+    CronJob(CronJobTarget),
 }
 
 impl FromStr for Target {
     type Err = ConfigError;
 
-    fn from_str(target: &str) -> Result<Target> {
+    // TODO(alex) [mid]: Here we have to add the `{this}/whatever-name` part of the target!
+    fn from_str(target: &str) -> config::Result<Target> {
         if target == "targetless" {
             return Ok(Target::Targetless);
         }
@@ -230,8 +242,9 @@ impl FromStr for Target {
             Some("deployment") | Some("deploy") => {
                 DeploymentTarget::from_split(&mut split).map(Target::Deployment)
             }
-            Some("rollout") => RolloutTarget::from_split(&mut split).map(Target::Rollout),
-            Some("pod") => PodTarget::from_split(&mut split).map(Target::Pod),
+            Some("rollout") => rollout::RolloutTarget::from_split(&mut split).map(Target::Rollout),
+            Some("pod") => pod::PodTarget::from_split(&mut split).map(Target::Pod),
+            Some("cronjob") => cronjob::CronJobTarget::from_split(&mut split).map(Target::CronJob),
             _ => Err(ConfigError::InvalidTarget(format!(
                 "Provided target: {target} is unsupported. Did you remember to add a prefix, e.g. pod/{target}? \n{FAIL_PARSE_DEPLOYMENT_OR_POD}",
             ))),
@@ -249,6 +262,7 @@ impl Target {
             Target::Targetless => {
                 unreachable!("this shouldn't happen - called from operator on a flow where it's not targetless.")
             }
+            Target::CronJob(cronjob) => cronjob.cronjob.clone(),
         }
     }
 }
@@ -294,6 +308,7 @@ macro_rules! impl_target_display {
 impl_target_display!(PodTarget, pod);
 impl_target_display!(DeploymentTarget, deployment);
 impl_target_display!(RolloutTarget, rollout);
+impl_target_display!(CronJobTarget, cronjob);
 
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -302,116 +317,7 @@ impl fmt::Display for Target {
             Target::Pod(pod) => pod.fmt_display(f),
             Target::Deployment(dep) => dep.fmt_display(f),
             Target::Rollout(roll) => roll.fmt_display(f),
-        }
-    }
-}
-
-/// <!--${internal}-->
-/// Mirror the pod specified by [`PodTarget::pod`].
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct PodTarget {
-    /// <!--${internal}-->
-    /// Pod to mirror.
-    pub pod: String,
-    pub container: Option<String>,
-}
-
-impl Display for PodTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}{}",
-            self.container
-                .as_ref()
-                .map(|c| format!("{c}/"))
-                .unwrap_or_default(),
-            self.pod.clone()
-        )
-    }
-}
-
-impl FromSplit for PodTarget {
-    fn from_split(split: &mut std::str::Split<char>) -> Result<Self> {
-        let pod = split
-            .next()
-            .ok_or_else(|| ConfigError::InvalidTarget(FAIL_PARSE_DEPLOYMENT_OR_POD.to_string()))?;
-        match (split.next(), split.next()) {
-            (Some("container"), Some(container)) => Ok(Self {
-                pod: pod.to_string(),
-                container: Some(container.to_string()),
-            }),
-            (None, None) => Ok(Self {
-                pod: pod.to_string(),
-                container: None,
-            }),
-            _ => Err(ConfigError::InvalidTarget(
-                FAIL_PARSE_DEPLOYMENT_OR_POD.to_string(),
-            )),
-        }
-    }
-}
-
-/// <!--${internal}-->
-/// Mirror the deployment specified by [`DeploymentTarget::deployment`].
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct DeploymentTarget {
-    /// <!--${internal}-->
-    /// Deployment to mirror.
-    pub deployment: String,
-    pub container: Option<String>,
-}
-
-impl FromSplit for DeploymentTarget {
-    fn from_split(split: &mut std::str::Split<char>) -> Result<Self> {
-        let deployment = split
-            .next()
-            .ok_or_else(|| ConfigError::InvalidTarget(FAIL_PARSE_DEPLOYMENT_OR_POD.to_string()))?;
-        match (split.next(), split.next()) {
-            (Some("container"), Some(container)) => Ok(Self {
-                deployment: deployment.to_string(),
-                container: Some(container.to_string()),
-            }),
-            (None, None) => Ok(Self {
-                deployment: deployment.to_string(),
-                container: None,
-            }),
-            _ => Err(ConfigError::InvalidTarget(
-                FAIL_PARSE_DEPLOYMENT_OR_POD.to_string(),
-            )),
-        }
-    }
-}
-
-/// <!--${internal}-->
-/// Mirror the rollout specified by [`RolloutTarget::rollout`].
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RolloutTarget {
-    /// <!--${internal}-->
-    /// Rollout to mirror.
-    pub rollout: String,
-    pub container: Option<String>,
-}
-
-impl FromSplit for RolloutTarget {
-    fn from_split(split: &mut std::str::Split<char>) -> Result<Self> {
-        let rollout = split
-            .next()
-            .ok_or_else(|| ConfigError::InvalidTarget(FAIL_PARSE_DEPLOYMENT_OR_POD.to_string()))?;
-        match (split.next(), split.next()) {
-            (Some("container"), Some(container)) => Ok(Self {
-                rollout: rollout.to_string(),
-                container: Some(container.to_string()),
-            }),
-            (None, None) => Ok(Self {
-                rollout: rollout.to_string(),
-                container: None,
-            }),
-            _ => Err(ConfigError::InvalidTarget(
-                FAIL_PARSE_DEPLOYMENT_OR_POD.to_string(),
-            )),
+            Target::CronJob(cronjob) => cronjob.fmt_display(f),
         }
     }
 }
@@ -425,6 +331,7 @@ bitflags::bitflags! {
         const DEPLOYMENT = 4;
         const CONTAINER = 8;
         const ROLLOUT = 16;
+        const CRONJOB = 32;
     }
 }
 
@@ -457,6 +364,12 @@ impl CollectAnalytics for &TargetConfig {
                 Target::Targetless => {
                     // Targetless is essentially 0, so no need to set any flags.
                 }
+                Target::CronJob(cronjob) => {
+                    flags |= TargetAnalyticFlags::ROLLOUT;
+                    if cronjob.container.is_some() {
+                        flags |= TargetAnalyticFlags::CONTAINER;
+                    }
+                }
             }
         }
         analytics.add("target_mode", flags.bits())
@@ -467,9 +380,9 @@ impl CollectAnalytics for &TargetConfig {
 mod tests {
     use rstest::rstest;
 
-    use super::*;
     use crate::{
         config::{ConfigContext, MirrordConfig},
+        target::{pod::PodTarget, rollout::RolloutTarget, Target, TargetConfig, TargetFileConfig},
         util::testing::with_env_vars,
     };
 
@@ -531,6 +444,8 @@ mod tests {
         #[case] namespace_env: Option<&str>,
         #[case] expected_target_config: TargetConfig,
     ) {
+        use crate::target::TargetFileConfig;
+
         with_env_vars(
             vec![
                 ("MIRRORD_IMPERSONATED_TARGET", path_env),

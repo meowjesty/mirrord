@@ -10,7 +10,7 @@ use crate::{
         },
         kubernetes::AgentKubernetesConnectInfo,
     },
-    error::Result,
+    error::KubeResult,
 };
 
 pub struct Targetless<'c, V> {
@@ -28,7 +28,7 @@ where
 }
 
 impl<'c> ContainerApi<JobVariant<'c>> for Targetless<'c, JobVariant<'c>> {
-    async fn create_agent<P>(&self, progress: &mut P) -> Result<AgentKubernetesConnectInfo>
+    async fn create_agent<P>(&self, progress: &mut P) -> KubeResult<AgentKubernetesConnectInfo>
     where
         P: Progress + Send + Sync,
     {

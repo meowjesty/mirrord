@@ -8,8 +8,6 @@ use mirrord_protocol::{ClientCodec, ClientMessage, DaemonMessage, LogLevel};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use crate::error::Result;
-
 pub mod container;
 pub mod kubernetes;
 mod runtime;

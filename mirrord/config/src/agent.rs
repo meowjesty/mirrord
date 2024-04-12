@@ -340,14 +340,14 @@ impl MirrordConfig for AgentImageFileConfig {
     /// `MIRRORD_AGENT_IMAGE` env var.
     fn generate_config(self, context: &mut ConfigContext) -> config::Result<Self::Generated> {
         let agent_image = match self {
-            AgentImageFileConfig::Simple(registry_and_tag) => {
-                registry_and_tag.unwrap_or_else(|| {
+            AgentImageFileConfig::Simple(registry_and_tag) => registry_and_tag
+                .and_then(|value| (&value != "").then_some(value))
+                .unwrap_or_else(|| {
                     format!(
                         "{DEFAULT_AGENT_IMAGE_REGISTRY}:{}",
                         env!("CARGO_PKG_VERSION")
                     )
-                })
-            }
+                }),
             AgentImageFileConfig::Advanced { registry, tag } => {
                 format!(
                     "{}:{}",

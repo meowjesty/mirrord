@@ -31,9 +31,10 @@ use crate::{
         runtime::RuntimeDataProvider,
         AgentManagment,
     },
-    error::{KubeApiError, Result},
+    error::{KubeApiError, KubeResult},
 };
 
+pub mod cronjob;
 pub mod rollout;
 
 pub struct KubernetesAPI {
@@ -42,7 +43,7 @@ pub struct KubernetesAPI {
 }
 
 impl KubernetesAPI {
-    pub async fn create(config: &LayerConfig) -> Result<Self> {
+    pub async fn create(config: &LayerConfig) -> KubeResult<Self> {
         let client = create_kube_api(
             config.accept_invalid_certificates,
             config.kubeconfig.clone(),
@@ -57,7 +58,7 @@ impl KubernetesAPI {
         KubernetesAPI { client, agent }
     }
 
-    pub async fn detect_openshift<P>(&self, progress: &P) -> Result<()>
+    pub async fn detect_openshift<P>(&self, progress: &P) -> KubeResult<()>
     where
         P: Progress + Send + Sync,
     {
@@ -118,7 +119,7 @@ impl AgentManagment for KubernetesAPI {
             namespace,
             ..
         }: Self::AgentRef,
-    ) -> Result<Self::Connection> {
+    ) -> KubeResult<Self::Connection> {
         use std::{net::IpAddr, time::Duration};
 
         use tokio::net::TcpStream;
@@ -159,7 +160,10 @@ impl AgentManagment for KubernetesAPI {
 
     /// Connects to the agent using kube's [`Api::portforward`].
     #[cfg(not(feature = "incluster"))]
-    async fn create_connection(&self, connect_info: Self::AgentRef) -> Result<Self::Connection> {
+    async fn create_connection(
+        &self,
+        connect_info: Self::AgentRef,
+    ) -> KubeResult<Self::Connection> {
         use tokio_retry::{
             strategy::{jitter, ExponentialBackoff},
             Retry,
@@ -260,7 +264,7 @@ pub async fn create_kube_api<P>(
     accept_invalid_certificates: bool,
     kubeconfig: Option<P>,
     kube_context: Option<String>,
-) -> Result<Client>
+) -> KubeResult<Client>
 where
     P: AsRef<str>,
 {
@@ -305,7 +309,7 @@ pub async fn get_namespaces(
     client: &Client,
     namespace: Option<&str>,
     lp: &ListParams,
-) -> Result<Vec<Namespace>> {
+) -> KubeResult<Vec<Namespace>> {
     let api: Api<Namespace> = Api::all(client.clone());
     Ok(if let Some(namespace) = namespace {
         vec![api.get(namespace).await?]

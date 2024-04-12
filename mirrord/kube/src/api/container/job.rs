@@ -25,14 +25,14 @@ use crate::{
         kubernetes::{get_k8s_resource_api, AgentKubernetesConnectInfo},
         runtime::RuntimeData,
     },
-    error::{KubeApiError, Result},
+    error::{KubeApiError, KubeResult},
 };
 
 pub async fn create_job_agent<P, V>(
     client: &Client,
     variant: &V,
     progress: &P,
-) -> Result<AgentKubernetesConnectInfo>
+) -> KubeResult<AgentKubernetesConnectInfo>
 where
     P: Progress + Send + Sync,
     V: ContainerVariant<Update = Job>,
@@ -146,7 +146,7 @@ impl ContainerVariant for JobVariant<'_> {
         self.params
     }
 
-    fn as_update(&self) -> Result<Job> {
+    fn as_update(&self) -> KubeResult<Job> {
         let JobVariant {
             agent,
             command_line,
@@ -282,7 +282,7 @@ impl ContainerVariant for JobTargetedVariant<'_> {
         self.inner.params()
     }
 
-    fn as_update(&self) -> Result<Job> {
+    fn as_update(&self) -> KubeResult<Job> {
         let JobTargetedVariant {
             inner: JobVariant { agent, params, .. },
             runtime_data,

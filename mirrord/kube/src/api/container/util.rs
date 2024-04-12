@@ -7,7 +7,7 @@ use mirrord_config::agent::{AgentConfig, LinuxCapability};
 use regex::Regex;
 use tracing::warn;
 
-use crate::{api::container::ContainerParams, error::Result};
+use crate::{api::container::ContainerParams, error::KubeResult};
 
 static AGENT_READY_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new("agent ready( - version (\\S+))?").expect("failed to create regex")
@@ -59,7 +59,7 @@ pub(super) async fn wait_for_agent_startup(
     pod_api: &Api<Pod>,
     pod_name: &str,
     container_name: String,
-) -> Result<Option<String>> {
+) -> KubeResult<Option<String>> {
     let logs = pod_api
         .log_stream(
             pod_name,

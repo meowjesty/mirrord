@@ -502,7 +502,7 @@ mod tests {
             },
             FeatureFileConfig,
         },
-        target::{PodTarget, Target, TargetFileConfig},
+        target::{pod::PodTarget, Target, TargetFileConfig},
         util::ToggleableConfig,
     };
 

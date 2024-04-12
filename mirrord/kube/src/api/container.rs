@@ -9,7 +9,7 @@ use rand::{
     Rng,
 };
 
-use crate::{api::kubernetes::AgentKubernetesConnectInfo, error::Result};
+use crate::{api::kubernetes::AgentKubernetesConnectInfo, error::KubeResult};
 
 pub mod ephemeral;
 pub mod job;
@@ -72,7 +72,7 @@ pub trait ContainerVariant {
 
     fn params(&self) -> &ContainerParams;
 
-    fn as_update(&self) -> Result<Self::Update>;
+    fn as_update(&self) -> KubeResult<Self::Update>;
 }
 
 pub trait ContainerApi<V>
@@ -80,7 +80,7 @@ where
     V: ContainerVariant,
 {
     #[allow(async_fn_in_trait)]
-    async fn create_agent<P>(&self, progress: &mut P) -> Result<AgentKubernetesConnectInfo>
+    async fn create_agent<P>(&self, progress: &mut P) -> KubeResult<AgentKubernetesConnectInfo>
     where
         P: Progress + Send + Sync;
 }

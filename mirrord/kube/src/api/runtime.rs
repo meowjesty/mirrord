@@ -6,23 +6,22 @@ use std::{
 };
 
 use k8s_openapi::{
-    api::{
-        apps::v1::Deployment,
-        core::v1::{Node, Pod},
-    },
+    api::core::v1::{Node, Pod},
     apimachinery::pkg::api::resource::Quantity,
 };
 use kube::{api::ListParams, Api, Client};
-use mirrord_config::target::{DeploymentTarget, PodTarget, RolloutTarget, Target};
 use mirrord_protocol::MeshVendor;
 
 use crate::{
-    api::{
-        container::choose_container,
-        kubernetes::{get_k8s_resource_api, rollout::Rollout},
-    },
-    error::{KubeApiError, Result},
+    api::{container::choose_container, kubernetes::get_k8s_resource_api},
+    error::{KubeApiError, KubeResult},
 };
+
+mod cronjob;
+mod deployment;
+mod pod;
+mod rollout;
+mod target;
 
 #[derive(Debug)]
 pub enum ContainerRuntime {
@@ -33,11 +32,12 @@ pub enum ContainerRuntime {
 
 impl Display for ContainerRuntime {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
+        let var_name = match self {
             ContainerRuntime::Docker => write!(f, "docker"),
             ContainerRuntime::Containerd => write!(f, "containerd"),
             ContainerRuntime::CriO => write!(f, "cri-o"),
-        }
+        };
+        var_name
     }
 }
 
@@ -55,7 +55,7 @@ pub struct RuntimeData {
 }
 
 impl RuntimeData {
-    fn from_pod(pod: &Pod, container_name: &Option<String>) -> Result<Self> {
+    fn from_pod(pod: &Pod, container_name: &Option<String>) -> KubeResult<Self> {
         let pod_name = pod
             .metadata
             .name
@@ -191,7 +191,11 @@ where
 }
 
 pub trait RuntimeDataProvider {
-    async fn runtime_data(&self, client: &Client, namespace: Option<&str>) -> Result<RuntimeData>;
+    async fn runtime_data(
+        &self,
+        client: &Client,
+        namespace: Option<&str>,
+    ) -> KubeResult<RuntimeData>;
 }
 
 pub trait RuntimeTarget {
@@ -205,14 +209,18 @@ pub trait RuntimeDataFromLabels {
         &self,
         client: &Client,
         namespace: Option<&str>,
-    ) -> Result<BTreeMap<String, String>>;
+    ) -> KubeResult<BTreeMap<String, String>>;
 }
 
 impl<T> RuntimeDataProvider for T
 where
     T: RuntimeTarget + RuntimeDataFromLabels,
 {
-    async fn runtime_data(&self, client: &Client, namespace: Option<&str>) -> Result<RuntimeData> {
+    async fn runtime_data(
+        &self,
+        client: &Client,
+        namespace: Option<&str>,
+    ) -> KubeResult<RuntimeData> {
         let labels = self.get_labels(client, namespace).await?;
 
         // convert to key value pair
@@ -239,98 +247,10 @@ where
     }
 }
 
-impl RuntimeDataProvider for Target {
-    async fn runtime_data(&self, client: &Client, namespace: Option<&str>) -> Result<RuntimeData> {
-        match self {
-            Target::Deployment(deployment) => deployment.runtime_data(client, namespace).await,
-            Target::Pod(pod) => pod.runtime_data(client, namespace).await,
-            Target::Rollout(rollout) => rollout.runtime_data(client, namespace).await,
-            Target::Targetless => {
-                unreachable!("runtime_data can't be called on Targetless")
-            }
-        }
-    }
-}
-
-impl RuntimeTarget for DeploymentTarget {
-    fn target(&self) -> &str {
-        &self.deployment
-    }
-
-    fn container(&self) -> &Option<String> {
-        &self.container
-    }
-}
-
-impl RuntimeDataFromLabels for DeploymentTarget {
-    async fn get_labels(
-        &self,
-        client: &Client,
-        namespace: Option<&str>,
-    ) -> Result<BTreeMap<String, String>> {
-        let deployment_api: Api<Deployment> = get_k8s_resource_api(client, namespace);
-        let deployment = deployment_api
-            .get(&self.deployment)
-            .await
-            .map_err(KubeApiError::KubeError)?;
-
-        deployment
-            .spec
-            .and_then(|spec| spec.selector.match_labels)
-            .ok_or_else(|| {
-                KubeApiError::DeploymentNotFound(format!(
-                    "Label for deployment: {}, not found!",
-                    self.deployment.clone()
-                ))
-            })
-    }
-}
-
-impl RuntimeTarget for RolloutTarget {
-    fn target(&self) -> &str {
-        &self.rollout
-    }
-
-    fn container(&self) -> &Option<String> {
-        &self.container
-    }
-}
-
-impl RuntimeDataFromLabels for RolloutTarget {
-    async fn get_labels(
-        &self,
-        client: &Client,
-        namespace: Option<&str>,
-    ) -> Result<BTreeMap<String, String>> {
-        let rollout_api: Api<Rollout> = get_k8s_resource_api(client, namespace);
-        let rollout = rollout_api
-            .get(&self.rollout)
-            .await
-            .map_err(KubeApiError::KubeError)?;
-
-        rollout.match_labels().ok_or_else(|| {
-            KubeApiError::DeploymentNotFound(format!(
-                "Label for rollout: {}, not found!",
-                self.rollout.clone()
-            ))
-        })
-    }
-}
-
-impl RuntimeDataProvider for PodTarget {
-    async fn runtime_data(&self, client: &Client, namespace: Option<&str>) -> Result<RuntimeData> {
-        let pod_api: Api<Pod> = get_k8s_resource_api(client, namespace);
-        let pod = pod_api.get(&self.pod).await?;
-
-        RuntimeData::from_pod(&pod, &self.container)
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use mirrord_config::target::{deployment::DeploymentTarget, pod::PodTarget, Target};
     use rstest::rstest;
-
-    use super::*;
 
     #[rstest]
     #[case("pod/foobaz", Target::Pod(PodTarget {pod: "foobaz".to_string(), container: None}))]

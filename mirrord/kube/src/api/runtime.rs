@@ -32,12 +32,12 @@ pub enum ContainerRuntime {
 
 impl Display for ContainerRuntime {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let var_name = match self {
+        
+        match self {
             ContainerRuntime::Docker => write!(f, "docker"),
             ContainerRuntime::Containerd => write!(f, "containerd"),
             ContainerRuntime::CriO => write!(f, "cri-o"),
-        };
-        var_name
+        }
     }
 }
 

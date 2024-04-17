@@ -341,7 +341,7 @@ impl MirrordConfig for AgentImageFileConfig {
     fn generate_config(self, context: &mut ConfigContext) -> config::Result<Self::Generated> {
         let agent_image = match self {
             AgentImageFileConfig::Simple(registry_and_tag) => registry_and_tag
-                .and_then(|value| (&value != "").then_some(value))
+                .and_then(|value| (!value.is_empty()).then_some(value))
                 .unwrap_or_else(|| {
                     format!(
                         "{DEFAULT_AGENT_IMAGE_REGISTRY}:{}",

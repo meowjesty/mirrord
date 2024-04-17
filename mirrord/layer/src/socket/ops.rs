@@ -182,8 +182,6 @@ pub(super) fn bind(
     let requested_port = requested_address.port();
     let incoming_config = crate::setup().incoming_config();
 
-    let ignore_localhost = incoming_config.ignore_localhost;
-
     let mut socket = {
         SOCKETS
             .remove(&sockfd)
@@ -199,7 +197,7 @@ pub(super) fn bind(
 
     // we don't use `is_localhost` here since unspecified means to listen
     // on all IPs.
-    if ignore_localhost && requested_address.ip().is_loopback() {
+    if incoming_config.ignore_localhost && requested_address.ip().is_loopback() {
         return Detour::Bypass(Bypass::IgnoreLocalhost(requested_port));
     }
 
@@ -209,6 +207,30 @@ pub(super) fn bind(
         || incoming_config.ignore_ports.contains(&requested_port)
     {
         Err(Bypass::Port(requested_address.port()))?;
+    }
+
+    {
+        let http_filter_used = incoming_config.mode == IncomingMode::Steal
+            && (incoming_config.http_filter.header_filter.is_some()
+                || incoming_config.http_filter.path_filter.is_some());
+
+        let not_stolen_with_filter = !http_filter_used
+            || incoming_config
+                .http_filter
+                .ports
+                .as_slice()
+                .iter()
+                .all(|port| *port != requested_port);
+
+        let not_whitelisted = incoming_config
+            .ports
+            .as_ref()
+            .map(|ports| !ports.contains(&requested_port))
+            .unwrap_or(http_filter_used);
+
+        if not_stolen_with_filter && not_whitelisted {
+            Err(Bypass::Port(requested_address.port()))?;
+        }
     }
 
     // Check that the domain matches the requested address.
@@ -1259,10 +1281,13 @@ pub(super) fn sendmsg(
         let mut true_message_header = Box::new(unsafe { *raw_message_header });
 
         unsafe {
-            true_message_header.as_mut().msg_name.copy_from(
-                rawish_true_destination.as_ptr() as *const _,
-                rawish_true_destination.len() as usize,
-            )
+            true_message_header
+                .as_mut()
+                .msg_name
+                .copy_from_nonoverlapping(
+                    rawish_true_destination.as_ptr() as *const _,
+                    rawish_true_destination.len() as usize,
+                )
         };
         true_message_header.as_mut().msg_namelen = rawish_true_destination.len();
 
@@ -1291,7 +1316,7 @@ pub(super) fn sendmsg(
             true_message_header
                 .as_mut()
                 .msg_name
-                .copy_from(raw_interceptor_address, raw_interceptor_length as usize)
+                .copy_from_nonoverlapping(raw_interceptor_address, raw_interceptor_length as usize)
         };
         true_message_header.as_mut().msg_namelen = raw_interceptor_length;
 

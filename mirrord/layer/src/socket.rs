@@ -19,9 +19,7 @@ use mirrord_protocol::{
 };
 use socket2::SockAddr;
 use tracing::warn;
-use trust_dns_resolver::config::Protocol;
 
-use self::id::SocketId;
 use crate::{
     common,
     detour::{Bypass, Detour, DetourGuard, OptionExt},
@@ -30,7 +28,6 @@ use crate::{
 };
 
 pub(super) mod hooks;
-pub(crate) mod id;
 pub(crate) mod ops;
 
 pub(crate) static SOCKETS: LazyLock<DashMap<RawFd, Arc<UserSocket>>> = LazyLock::new(DashMap::new);
@@ -140,7 +137,6 @@ impl TryFrom<c_int> for SocketKind {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) struct UserSocket {
-    pub(crate) id: SocketId,
     domain: c_int,
     type_: c_int,
     protocol: c_int,
@@ -157,7 +153,6 @@ impl UserSocket {
         kind: SocketKind,
     ) -> Self {
         Self {
-            id: Default::default(),
             domain,
             type_,
             protocol,
@@ -465,33 +460,6 @@ fn fill_address(
     Detour::Success(result)
 }
 
-pub(crate) trait ProtocolExt {
-    fn try_from_raw(ai_protocol: i32) -> HookResult<Protocol>;
-    fn try_into_raw(self) -> HookResult<i32>;
-}
-
-impl ProtocolExt for Protocol {
-    fn try_from_raw(ai_protocol: i32) -> HookResult<Self> {
-        match ai_protocol {
-            libc::IPPROTO_UDP => Ok(Protocol::Udp),
-            libc::IPPROTO_TCP => Ok(Protocol::Tcp),
-            libc::IPPROTO_SCTP => todo!(),
-            other => {
-                warn!("Trying a protocol of {:#?}", other);
-                Ok(Protocol::Tcp)
-            }
-        }
-    }
-
-    fn try_into_raw(self) -> HookResult<i32> {
-        match self {
-            Protocol::Udp => Ok(libc::IPPROTO_UDP),
-            Protocol::Tcp => Ok(libc::IPPROTO_TCP),
-            _ => todo!(),
-        }
-    }
-}
-
 pub trait SocketAddrExt {
     /// Converts a raw [`sockaddr`] pointer into a more _Rusty_ type
     fn try_from_raw(raw_address: *const sockaddr, address_length: socklen_t) -> Detour<Self>
@@ -503,9 +471,10 @@ impl SocketAddrExt for SockAddr {
     fn try_from_raw(raw_address: *const sockaddr, address_length: socklen_t) -> Detour<SockAddr> {
         unsafe {
             SockAddr::try_init(|storage, len| {
-                storage.copy_from_nonoverlapping(raw_address.cast(), 1);
-                len.copy_from_nonoverlapping(&address_length, 1);
-
+                // storage and raw_address size is dynamic.
+                (storage as *mut u8)
+                    .copy_from_nonoverlapping(raw_address as *const u8, address_length as usize);
+                *len = address_length;
                 Ok(())
             })
         }

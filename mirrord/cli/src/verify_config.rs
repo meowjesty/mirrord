@@ -6,7 +6,7 @@ use mirrord_config::{
     config::{ConfigContext, MirrordConfig},
     feature::FeatureConfig,
     target::{
-        cronjob::CronJobTarget, deployment::DeploymentTarget, pod::PodTarget,
+        cronjob::CronJobTarget, deployment::DeploymentTarget, job::JobTarget, pod::PodTarget,
         rollout::RolloutTarget, Target, TargetConfig,
     },
 };
@@ -34,6 +34,9 @@ enum VerifiedTarget {
     Rollout(RolloutTarget),
 
     #[serde(untagged)]
+    Job(JobTarget),
+
+    #[serde(untagged)]
     CronJob(CronJobTarget),
 }
 
@@ -44,6 +47,7 @@ impl From<Target> for VerifiedTarget {
             Target::Pod(p) => Self::Pod(p),
             Target::Rollout(r) => Self::Rollout(r),
             Target::Targetless => Self::Targetless,
+            Target::Job(j) => Self::Job(j),
             Target::CronJob(c) => Self::CronJob(c),
         }
     }

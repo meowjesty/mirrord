@@ -17,6 +17,7 @@ impl RuntimeDataProvider for Target {
             Target::Targetless => {
                 unreachable!("runtime_data can't be called on Targetless")
             }
+            Target::Job(job) => job.runtime_data(client, namespace).await,
             Target::CronJob(cronjob) => cronjob.runtime_data(client, namespace).await,
         }
     }

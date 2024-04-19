@@ -34,6 +34,7 @@ use crate::{
 };
 
 pub mod cronjob;
+pub mod job;
 pub mod rollout;
 
 pub struct KubernetesAPI {

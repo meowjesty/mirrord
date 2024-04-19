@@ -19,6 +19,7 @@ use crate::{
 
 mod cronjob;
 mod deployment;
+mod job;
 mod pod;
 mod rollout;
 mod target;
@@ -32,7 +33,6 @@ pub enum ContainerRuntime {
 
 impl Display for ContainerRuntime {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        
         match self {
             ContainerRuntime::Docker => write!(f, "docker"),
             ContainerRuntime::Containerd => write!(f, "containerd"),

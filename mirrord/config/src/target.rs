@@ -6,7 +6,8 @@ use schemars::{gen::SchemaGenerator, schema::SchemaObject, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use self::{
-    cronjob::CronJobTarget, deployment::DeploymentTarget, pod::PodTarget, rollout::RolloutTarget,
+    cronjob::CronJobTarget, deployment::DeploymentTarget, job::JobTarget, pod::PodTarget,
+    rollout::RolloutTarget,
 };
 use crate::{
     config::{
@@ -20,6 +21,7 @@ use crate::{
 
 pub mod cronjob;
 pub mod deployment;
+pub mod job;
 pub mod pod;
 pub mod rollout;
 
@@ -226,6 +228,7 @@ pub enum Target {
     /// Spawn a new pod.
     Targetless,
 
+    Job(JobTarget),
     CronJob(CronJobTarget),
 }
 
@@ -233,17 +236,20 @@ impl FromStr for Target {
     type Err = ConfigError;
 
     // TODO(alex) [mid]: Here we have to add the `{this}/whatever-name` part of the target!
+    #[tracing::instrument(level = "debug", ret)]
     fn from_str(target: &str) -> config::Result<Target> {
         if target == "targetless" {
             return Ok(Target::Targetless);
         }
         let mut split = target.split('/');
+
         match split.next() {
             Some("deployment") | Some("deploy") => {
                 DeploymentTarget::from_split(&mut split).map(Target::Deployment)
             }
             Some("rollout") => rollout::RolloutTarget::from_split(&mut split).map(Target::Rollout),
             Some("pod") => pod::PodTarget::from_split(&mut split).map(Target::Pod),
+            Some("job") => job::JobTarget::from_split(&mut split).map(Target::Job),
             Some("cronjob") => cronjob::CronJobTarget::from_split(&mut split).map(Target::CronJob),
             _ => Err(ConfigError::InvalidTarget(format!(
                 "Provided target: {target} is unsupported. Did you remember to add a prefix, e.g. pod/{target}? \n{FAIL_PARSE_DEPLOYMENT_OR_POD}",
@@ -262,6 +268,7 @@ impl Target {
             Target::Targetless => {
                 unreachable!("this shouldn't happen - called from operator on a flow where it's not targetless.")
             }
+            Target::Job(job) => job.job.clone(),
             Target::CronJob(cronjob) => cronjob.cronjob.clone(),
         }
     }
@@ -308,6 +315,7 @@ macro_rules! impl_target_display {
 impl_target_display!(PodTarget, pod);
 impl_target_display!(DeploymentTarget, deployment);
 impl_target_display!(RolloutTarget, rollout);
+impl_target_display!(JobTarget, job);
 impl_target_display!(CronJobTarget, cronjob);
 
 impl fmt::Display for Target {
@@ -317,6 +325,7 @@ impl fmt::Display for Target {
             Target::Pod(pod) => pod.fmt_display(f),
             Target::Deployment(dep) => dep.fmt_display(f),
             Target::Rollout(roll) => roll.fmt_display(f),
+            Target::Job(job) => job.fmt_display(f),
             Target::CronJob(cronjob) => cronjob.fmt_display(f),
         }
     }
@@ -331,7 +340,8 @@ bitflags::bitflags! {
         const DEPLOYMENT = 4;
         const CONTAINER = 8;
         const ROLLOUT = 16;
-        const CRONJOB = 32;
+        const JOB = 32;
+        const CRONJOB = 64;
     }
 }
 
@@ -364,8 +374,14 @@ impl CollectAnalytics for &TargetConfig {
                 Target::Targetless => {
                     // Targetless is essentially 0, so no need to set any flags.
                 }
+                Target::Job(job) => {
+                    flags |= TargetAnalyticFlags::JOB;
+                    if job.container.is_some() {
+                        flags |= TargetAnalyticFlags::CONTAINER;
+                    }
+                }
                 Target::CronJob(cronjob) => {
-                    flags |= TargetAnalyticFlags::ROLLOUT;
+                    flags |= TargetAnalyticFlags::CRONJOB;
                     if cronjob.container.is_some() {
                         flags |= TargetAnalyticFlags::CONTAINER;
                     }

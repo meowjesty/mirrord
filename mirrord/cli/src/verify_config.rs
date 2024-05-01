@@ -44,6 +44,7 @@ impl From<Target> for VerifiedTarget {
             Target::Pod(p) => Self::Pod(p),
             Target::Rollout(r) => Self::Rollout(r),
             Target::Job(j) => Self::Job(j),
+            Target::CronJob(cj) => Self::CronJob(cj),
             Target::Targetless => Self::Targetless,
         }
     }

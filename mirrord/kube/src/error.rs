@@ -33,6 +33,9 @@ pub enum KubeApiError {
     #[error("mirrord-layer: Job: `{0} not found!`")]
     JobNotFound(String),
 
+    #[error("mirrord-layer: CronJob: `{0} not found!`")]
+    CronJobNotFound(String),
+
     #[error("mirrord-layer: Failed to get Container runtime data for `{0}`!")]
     ContainerRuntimeParseError(String),
 

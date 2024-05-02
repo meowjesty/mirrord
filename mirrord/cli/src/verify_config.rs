@@ -6,8 +6,8 @@ use mirrord_config::{
     config::{ConfigContext, MirrordConfig},
     feature::FeatureConfig,
     target::{
-        deployment::DeploymentTarget, job::JobTarget, pod::PodTarget, rollout::RolloutTarget,
-        Target, TargetConfig,
+        cron_job::CronJobTarget, deployment::DeploymentTarget, job::JobTarget, pod::PodTarget,
+        rollout::RolloutTarget, Target, TargetConfig,
     },
 };
 use serde::Serialize;
@@ -35,6 +35,9 @@ enum VerifiedTarget {
 
     #[serde(untagged)]
     Job(JobTarget),
+
+    #[serde(untagged)]
+    CronJob(CronJobTarget),
 }
 
 impl From<Target> for VerifiedTarget {

@@ -1,10 +1,10 @@
 #[cfg(target_os = "linux")]
 use std::time::Duration;
-use std::{env, ffi::CString, io::SeekFrom, os::unix::io::RawFd, path::PathBuf};
+use std::{env, ffi::CString, fs::OpenOptions, io::SeekFrom, os::unix::io::RawFd, path::PathBuf};
 
 #[cfg(target_os = "linux")]
 use libc::{c_char, statx, statx_timestamp};
-use libc::{c_int, iovec, unlink, AT_FDCWD};
+use libc::{c_int, iovec, unlink, AT_FDCWD, O_CLOEXEC};
 use mirrord_protocol::file::{
     OpenFileRequest, OpenFileResponse, OpenOptionsInternal, ReadFileResponse, SeekFileResponse,
     WriteFileResponse, XstatFsResponse, XstatResponse,
@@ -258,6 +258,16 @@ pub(crate) fn readv(iovs: Option<&[iovec]>) -> Detour<(&[iovec], u64)> {
     let read_size: u64 = iovs.iter().fold(0, |sum, iov| sum + iov.iov_len as u64);
 
     Detour::Success((iovs, read_size))
+}
+
+#[mirrord_layer_macro::instrument(level = "trace")]
+pub(crate) fn readlink(path: Detour<PathBuf>, read_amount: u64) -> Detour<ReadFileResponse> {
+    let file = open(
+        path,
+        OpenOptionsInternalExt::from_flags(O_RDONLY | O_CLOEXEC),
+    )?;
+
+    read(file, read_amount)
 }
 
 #[mirrord_layer_macro::instrument(level = "trace")]

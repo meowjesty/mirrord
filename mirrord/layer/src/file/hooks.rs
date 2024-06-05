@@ -280,6 +280,34 @@ pub(crate) unsafe extern "C" fn readdir_detour(dirp: *mut DIR) -> usize {
     }
 }
 
+// TODO(alex) [high]:
+// 1. Tries to `statx(gatos)`;
+// 2. Fails with `lstat /gatos` no such file or dir;
+#[hook_guard_fn]
+pub(crate) unsafe extern "C" fn readlink_detour(
+    raw_path: *const c_char,
+    out_buffer: *mut c_char,
+    buffer_size: size_t,
+) -> ssize_t {
+    readlink(raw_path.checked_into(), buffer_size as u64)
+        .map(|read_file| {
+            let ReadFileResponse { bytes, read_amount } = read_file;
+
+            // There is no distinction between reading 0 bytes or if we hit EOF, but we only copy to
+            // buffer if we have something to copy.
+            if read_amount > 0 {
+                let read_ptr = bytes.as_ptr();
+                let out_buffer = out_buffer.cast();
+                ptr::copy(read_ptr, out_buffer, read_amount as usize);
+            }
+
+            // WARN: Must be careful when it comes to `EOF`, incorrect handling may appear as the
+            // `read` call being repeated.
+            ssize_t::try_from(read_amount).unwrap()
+        })
+        .unwrap_or_bypass_with(|_| FN_READLINK(raw_path, out_buffer, buffer_size))
+}
+
 #[hook_guard_fn]
 pub(crate) unsafe extern "C" fn closedir_detour(dirp: *mut DIR) -> c_int {
     OPEN_DIRS
@@ -749,6 +777,9 @@ fn stat_logic<const FOLLOW_SYMLINK: bool>(
     raw_path: Option<*const c_char>,
     out_stat: *mut stat64,
 ) -> Detour<c_int> {
+    let path: Option<Detour<std::path::PathBuf>> = raw_path.map(CheckedInto::checked_into);
+    tracing::info!("generic stat path: {path:?}");
+
     if out_stat.is_null() {
         Detour::Error(HookError::BadPointer)
     } else {
@@ -765,6 +796,9 @@ fn stat_logic<const FOLLOW_SYMLINK: bool>(
 /// Hook for `libc::lstat`.
 #[hook_guard_fn]
 unsafe extern "C" fn lstat_detour(raw_path: *const c_char, out_stat: *mut stat) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("lstat path: {path:?}");
+
     stat_logic::<false>(0, None, Some(raw_path), out_stat as *mut _).unwrap_or_bypass_with(
         |_bypass| {
             #[cfg(target_os = "macos")]
@@ -784,6 +818,9 @@ pub(crate) unsafe extern "C" fn fstat_detour(fd: RawFd, out_stat: *mut stat) -> 
 /// Hook for `libc::stat`.
 #[hook_guard_fn]
 unsafe extern "C" fn stat_detour(raw_path: *const c_char, out_stat: *mut stat) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("stat path: {path:?}");
+
     stat_logic::<true>(0, None, Some(raw_path), out_stat as *mut _).unwrap_or_bypass_with(
         |_bypass| {
             #[cfg(target_os = "macos")]
@@ -798,13 +835,16 @@ unsafe extern "C" fn stat_detour(raw_path: *const c_char, out_stat: *mut stat) -
 #[hook_guard_fn]
 unsafe extern "C" fn statx_detour(
     dir_fd: RawFd,
-    path_name: *const c_char,
+    raw_path: *const c_char,
     flags: c_int,
     mask: c_int,
     statx_buf: *mut statx,
 ) -> c_int {
-    statx_logic(dir_fd, path_name, flags, mask, statx_buf)
-        .unwrap_or_bypass_with(|_bypass| FN_STATX(dir_fd, path_name, flags, mask, statx_buf))
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("statx path: {path:?}");
+
+    statx_logic(dir_fd, raw_path, flags, mask, statx_buf)
+        .unwrap_or_bypass_with(|_bypass| FN_STATX(dir_fd, raw_path, flags, mask, statx_buf))
 }
 
 /// Hook for libc's stat syscall wrapper.
@@ -814,6 +854,9 @@ pub(crate) unsafe extern "C" fn __xstat_detour(
     raw_path: *const c_char,
     out_stat: *mut stat,
 ) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("__xstat path: {path:?}");
+
     stat_logic::<true>(ver, None, Some(raw_path), out_stat as *mut _).unwrap_or_bypass_with(
         |_bypass| {
             #[cfg(target_os = "macos")]
@@ -830,6 +873,9 @@ pub(crate) unsafe extern "C" fn __lxstat_detour(
     raw_path: *const c_char,
     out_stat: *mut stat,
 ) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("__lxxstat path: {path:?}");
+
     stat_logic::<true>(ver, None, Some(raw_path), out_stat as *mut _).unwrap_or_bypass_with(
         |_bypass| {
             #[cfg(target_os = "macos")]
@@ -846,6 +892,9 @@ pub(crate) unsafe extern "C" fn __xstat64_detour(
     raw_path: *const c_char,
     out_stat: *mut stat64,
 ) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("__xstat64 path: {path:?}");
+
     stat_logic::<true>(ver, None, Some(raw_path), out_stat).unwrap_or_bypass_with(|_bypass| {
         #[cfg(target_os = "macos")]
         let raw_path = update_ptr_from_bypass(raw_path, _bypass);
@@ -860,6 +909,9 @@ pub(crate) unsafe extern "C" fn __lxstat64_detour(
     raw_path: *const c_char,
     out_stat: *mut stat64,
 ) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("__lxxstat64 path: {path:?}");
+
     stat_logic::<true>(ver, None, Some(raw_path), out_stat).unwrap_or_bypass_with(|_bypass| {
         #[cfg(target_os = "macos")]
         let raw_path = update_ptr_from_bypass(raw_path, _bypass);
@@ -874,6 +926,9 @@ pub(crate) unsafe fn fstatat_logic(
     out_stat: *mut stat,
     flag: c_int,
 ) -> Detour<i32> {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("generic fstatat path: {path:?}");
+
     if out_stat.is_null() {
         return Detour::Error(HookError::BadPointer);
     }
@@ -894,10 +949,49 @@ unsafe extern "C" fn fstatat_detour(
     out_stat: *mut stat,
     flag: c_int,
 ) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("fstatat path: {path:?}");
+
     fstatat_logic(fd, raw_path, out_stat, flag).unwrap_or_bypass_with(|_bypass| {
         #[cfg(target_os = "macos")]
         let raw_path = update_ptr_from_bypass(raw_path, _bypass);
         FN_FSTATAT(fd, raw_path, out_stat, flag)
+    })
+}
+
+#[hook_guard_fn]
+unsafe extern "C" fn fstatat64_detour(
+    fd: RawFd,
+    raw_path: *const c_char,
+    out_stat: *mut stat,
+    flag: c_int,
+) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("fstatat64 path: {path:?}");
+
+    fstatat_logic(fd, raw_path, out_stat, flag).unwrap_or_bypass_with(|_bypass| {
+        #[cfg(target_os = "macos")]
+        let raw_path = update_ptr_from_bypass(raw_path, _bypass);
+
+        FN_FSTATAT64(fd, raw_path, out_stat, flag)
+    })
+}
+
+#[hook_guard_fn]
+unsafe extern "C" fn newfstatat_detour(
+    fd: RawFd,
+    raw_path: *const c_char,
+    out_stat: *mut stat,
+    flag: c_int,
+) -> c_int {
+    let path: Detour<std::path::PathBuf> = raw_path.checked_into();
+    tracing::info!("newfstatat path: {path:?}");
+
+    fstatat_logic(fd, raw_path, out_stat, flag).unwrap_or_bypass_with(|_bypass| {
+        #[cfg(target_os = "macos")]
+        let raw_path = update_ptr_from_bypass(raw_path, _bypass);
+
+        FN_NEWFSTATAT(fd, raw_path, out_stat, flag)
     })
 }
 
@@ -920,6 +1014,9 @@ unsafe fn realpath_logic(
     source_path: *const c_char,
     output_path: *mut c_char,
 ) -> Detour<*mut c_char> {
+    let path: Detour<std::path::PathBuf> = source_path.checked_into();
+    tracing::info!("realpath path: {path:?}");
+
     let path = source_path.checked_into();
 
     realpath(path).map(|res| {
@@ -1206,6 +1303,21 @@ pub(crate) unsafe fn enable_file_hooks(hook_manager: &mut HookManager) {
 
         replace!(
             hook_manager,
+            "fstatat64",
+            fstatat64_detour,
+            FnFstatat64,
+            FN_FSTATAT64
+        );
+        replace!(
+            hook_manager,
+            "newfstatat",
+            newfstatat_detour,
+            FnNewfstatat,
+            FN_NEWFSTATAT
+        );
+
+        replace!(
+            hook_manager,
             "fstatfs",
             fstatfs_detour,
             FnFstatfs,
@@ -1248,6 +1360,15 @@ pub(crate) unsafe fn enable_file_hooks(hook_manager: &mut HookManager) {
             FnReaddir,
             FN_READDIR
         );
+
+        replace!(
+            hook_manager,
+            "readlink",
+            readlink_detour,
+            FnReadlink,
+            FN_READLINK
+        );
+
         // aarch + macOS hooks fail
         // because macOs internally calls this with pointer authentication
         // and we don't compile to arm64e yet, so it breaks.

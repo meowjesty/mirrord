@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    sync::{Arc, LazyLock, OnceLock, RwLock},
+    sync::{atomic::AtomicBool, OnceLock},
     time::Duration,
 };
 
@@ -41,7 +41,9 @@ mod proxies;
 mod remote_resources;
 mod request_queue;
 
-static HANDSHAKE_VERSION: OnceLock<semver::Version> = OnceLock::new();
+const OLD_AGENT_SENTINEL: semver::Version = semver::Version::new(0xbad, 0xa55, 0xca7);
+static IS_OLD_AGENT: AtomicBool = AtomicBool::new(false);
+static HANDSHAKE_ON_VERSION: OnceLock<semver::Version> = OnceLock::new();
 
 /// [`TaskSender`]s for main background tasks. See [`MainTaskId`].
 struct TaskTxs {
@@ -142,6 +144,14 @@ impl IntProxy {
         first_timeout: Duration,
         idle_timeout: Duration,
     ) -> Result<(), IntProxyError> {
+        // Sends the handshake message twice:
+        // 1. With the sentinel value, to see if we receive it back, which means old agent;
+        // 2. Now with the real value we want the handshake on;
+        self.task_txs
+            .agent
+            .send(ClientMessage::SwitchProtocolVersion(OLD_AGENT_SENTINEL))
+            .await;
+
         self.task_txs
             .agent
             .send(ClientMessage::SwitchProtocolVersion(
@@ -319,19 +329,26 @@ impl IntProxy {
                     .send(IncomingProxyMessage::AgentSteal(msg))
                     .await
             }
-            DaemonMessage::SwitchProtocolVersionResponse(agent_protocol_version) => {
-                let layer_protocol_version = mirrord_protocol::VERSION.clone();
-                if layer_protocol_version < agent_protocol_version {
-                    // New version of the agent.
-                    HANDSHAKE_VERSION.set(agent_protocol_version.clone());
-                } else if layer_protocol_version == agent_protocol_version {
-                    // Might be old agent or new agent with same version.
-                } else if agent_protocol_version == semver::Version::new(0xbad, 0xa55, 0xdad) {
-                    // New agent with the same protocol version as layer.
+            DaemonMessage::SwitchProtocolVersionResponse(handshake_version) => {
+                // Older agents reply to this message with whatever they received from the
+                // `ClientMessage::SwitchProtocolVersionRequest`, so we need this little
+                // dance to figure out whether it's a new or old agent version we're
+                // dealing with.
+                //
+                // An older agent will reply with the sentinel, so we mark it as old, while
+                // new agents will reply with a valid handshake version.
+                if handshake_version == OLD_AGENT_SENTINEL {
+                    // Old agent replies with this dumb value.
+                    IS_OLD_AGENT.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else {
+                    // Store anything other than the sentinel value.
+                    HANDSHAKE_ON_VERSION.set(handshake_version.clone()).ok();
                 }
 
-                // TODO(alex) [high]: Here we have the agent/protocol version.
-                if CLIENT_READY_FOR_LOGS.matches(&agent_protocol_version) {
+                let ready_for_logs = HANDSHAKE_ON_VERSION
+                    .get()
+                    .unwrap_or_else(|| mirrord_protocol::VERSION.deref());
+                if CLIENT_READY_FOR_LOGS.matches(ready_for_logs) {
                     self.task_txs.agent.send(ClientMessage::ReadyForLogs).await;
                 }
             }

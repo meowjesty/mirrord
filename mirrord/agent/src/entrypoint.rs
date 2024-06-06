@@ -454,17 +454,21 @@ impl ClientConnectionHandler {
                 ))
                 .await?;
             }
-            ClientMessage::SwitchProtocolVersion(version) => {
-                // TODO(alex) [high]: Change it all here! Look for a specific version, then
-                // we can do whatever.
+            ClientMessage::SwitchProtocolVersion(client_version) => {
+                // Agree on the min version supported by both sides (which is most likely
+                // the agent's).
+                let handshake_version = client_version.min(mirrord_protocol::VERSION.clone());
+
                 if let Some(tcp_stealer_api) = self.tcp_stealer_api.as_mut() {
                     tcp_stealer_api
-                        .switch_protocol_version(version.clone())
+                        .switch_protocol_version(handshake_version.clone())
                         .await?;
                 }
 
-                self.respond(DaemonMessage::SwitchProtocolVersionResponse(version))
-                    .await?;
+                self.respond(DaemonMessage::SwitchProtocolVersionResponse(
+                    handshake_version,
+                ))
+                .await?;
             }
             ClientMessage::ReadyForLogs => {}
         }

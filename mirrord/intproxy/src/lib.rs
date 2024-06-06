@@ -1,6 +1,11 @@
 #![warn(clippy::indexing_slicing)]
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    sync::{Arc, LazyLock, OnceLock, RwLock},
+    time::Duration,
+};
 
 use background_tasks::{BackgroundTasks, TaskSender, TaskUpdate};
 use layer_conn::LayerConnection;
@@ -35,6 +40,8 @@ mod ping_pong;
 mod proxies;
 mod remote_resources;
 mod request_queue;
+
+static HANDSHAKE_VERSION: OnceLock<semver::Version> = OnceLock::new();
 
 /// [`TaskSender`]s for main background tasks. See [`MainTaskId`].
 struct TaskTxs {
@@ -312,8 +319,19 @@ impl IntProxy {
                     .send(IncomingProxyMessage::AgentSteal(msg))
                     .await
             }
-            DaemonMessage::SwitchProtocolVersionResponse(protocol_version) => {
-                if CLIENT_READY_FOR_LOGS.matches(&protocol_version) {
+            DaemonMessage::SwitchProtocolVersionResponse(agent_protocol_version) => {
+                let layer_protocol_version = mirrord_protocol::VERSION.clone();
+                if layer_protocol_version < agent_protocol_version {
+                    // New version of the agent.
+                    HANDSHAKE_VERSION.set(agent_protocol_version.clone());
+                } else if layer_protocol_version == agent_protocol_version {
+                    // Might be old agent or new agent with same version.
+                } else if agent_protocol_version == semver::Version::new(0xbad, 0xa55, 0xdad) {
+                    // New agent with the same protocol version as layer.
+                }
+
+                // TODO(alex) [high]: Here we have the agent/protocol version.
+                if CLIENT_READY_FOR_LOGS.matches(&agent_protocol_version) {
                     self.task_txs.agent.send(ClientMessage::ReadyForLogs).await;
                 }
             }

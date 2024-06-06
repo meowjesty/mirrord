@@ -455,6 +455,8 @@ impl ClientConnectionHandler {
                 .await?;
             }
             ClientMessage::SwitchProtocolVersion(version) => {
+                // TODO(alex) [high]: Change it all here! Look for a specific version, then
+                // we can do whatever.
                 if let Some(tcp_stealer_api) = self.tcp_stealer_api.as_mut() {
                     tcp_stealer_api
                         .switch_protocol_version(version.clone())

@@ -3523,6 +3523,7 @@ dependencies = [
  "mirrord-operator",
  "mirrord-protocol",
  "rand",
+ "semver 1.0.23",
  "serde",
  "thiserror",
  "tokio",

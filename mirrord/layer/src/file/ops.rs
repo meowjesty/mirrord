@@ -300,17 +300,24 @@ pub(crate) fn read_link(path: Detour<PathBuf>) -> Detour<ReadLinkFileResponse> {
 
 #[mirrord_layer_macro::instrument(level = "trace", ret)]
 pub(crate) fn read_link_at(local_fd: RawFd, path: Detour<PathBuf>) -> Detour<ReadLinkFileResponse> {
+    tracing::info!("the fd is {local_fd:?}");
     if crate::setup().experimental().readlink {
+        tracing::info!("the path is {path:?}");
         let path = path?;
 
         if path.is_relative() {
             // Calls with non absolute paths are sent to libc::readlinkat.
             Detour::Bypass(Bypass::RelativePath(path.clone()))?
         };
+        tracing::info!("should not be relative {path:?}");
 
         ensure_not_ignored!(path, false);
 
+        tracing::info!("should not be ignored {path:?}");
+
         let remote_fd = get_remote_fd(local_fd)?;
+
+        tracing::info!("and the remote fd is {remote_fd:?}");
 
         let requesting_path = ReadLinkAtFileRequest {
             fd: remote_fd,

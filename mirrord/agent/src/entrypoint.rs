@@ -309,11 +309,20 @@ impl ClientConnectionHandler {
     /// Starts a loop that handles client connection and state.
     ///
     /// Breaks upon receiver/sender drop.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "info", skip(self))]
     async fn start(mut self, cancellation_token: CancellationToken) -> Result<()> {
+        // TODO(alex) [high]: Could put a timeout here, if nothing is received, but then
+        // we would also time out when user hits a breakpoint?
+        let mut timeout_on_layer_silence = tokio::time::interval(Duration::from_secs(60 * 3));
+        timeout_on_layer_silence.tick().await;
+
         let error = loop {
             select! {
+                biased;
                 message = self.connection.receive() => {
+                    info!("self.connection.receive reset");
+                    timeout_on_layer_silence.reset();
+
                     let Some(message) = message? else {
                         debug!("Client {} disconnected", self.id);
                         return Ok(());
@@ -337,9 +346,13 @@ impl ClientConnectionHandler {
                     } else {
                         unreachable!()
                     }
-                }, if self.tcp_sniffer_api.is_some() => match message {
-                    Ok(message) => self.respond(DaemonMessage::Tcp(message)).await?,
-                    Err(e) => break e,
+                }, if self.tcp_sniffer_api.is_some() => {
+                    info!("sniffer_api.recv().await reset");
+                    timeout_on_layer_silence.reset();
+                     match message {
+                        Ok(message) => self.respond(DaemonMessage::Tcp(message)).await?,
+                        Err(e) => break e,
+                    }
                 },
                 message = async {
                     if let Some(ref mut stealer_api) = self.tcp_stealer_api {
@@ -347,23 +360,40 @@ impl ClientConnectionHandler {
                     } else {
                         unreachable!()
                     }
-                }, if self.tcp_stealer_api.is_some() => match message {
-                    Ok(message) => self.respond(DaemonMessage::TcpSteal(message)).await?,
-                    Err(e) => break e,
+                }, if self.tcp_stealer_api.is_some() => {
+                    info!("stealer_api.recv().await reset");
+                    timeout_on_layer_silence.reset();
+                    match message {
+                        Ok(message) => self.respond(DaemonMessage::TcpSteal(message)).await?,
+                        Err(e) => break e,
+                    }
                 },
-                message = self.tcp_outgoing_api.daemon_message() => match message {
-                    Ok(message) => self.respond(DaemonMessage::TcpOutgoing(message)).await?,
-                    Err(e) => break e,
+                message = self.tcp_outgoing_api.daemon_message() => {
+                    info!("self.tcp_outgoing_api.daemon_message reset");
+                    timeout_on_layer_silence.reset();
+                    match message {
+                        Ok(message) => self.respond(DaemonMessage::TcpOutgoing(message)).await?,
+                        Err(e) => break e,
+                    }
                 },
-                message = self.udp_outgoing_api.daemon_message() => match message {
-                    Ok(message) => self.respond(DaemonMessage::UdpOutgoing(message)).await?,
-                    Err(e) => break e,
+                message = self.udp_outgoing_api.daemon_message() => {
+                    info!("self.udp_outgoing_api.daemon_message reset");
+                    timeout_on_layer_silence.reset();
+                    match message {
+                        Ok(message) => self.respond(DaemonMessage::UdpOutgoing(message)).await?,
+                        Err(e) => break e,
+                    }
                 },
-                message = self.dns_api.recv() => match message {
-                    Ok(message) => self.respond(DaemonMessage::GetAddrInfoResponse(message)).await?,
-                    Err(e) => break e,
+                message = self.dns_api.recv() => {
+                    info!("self.dns_api.recv reset");
+                    timeout_on_layer_silence.reset();
+                    match message {
+                        Ok(message) => self.respond(DaemonMessage::GetAddrInfoResponse(message)).await?,
+                        Err(e) => break e,
+                    }
                 },
                 _ = cancellation_token.cancelled() => return Ok(()),
+                _ = timeout_on_layer_silence.tick() => { info!("breaking interval"); return Ok(())},
             }
         };
 
@@ -579,6 +609,8 @@ async fn start_agent(args: Args) -> Result<()> {
 
     let mut clients: JoinSet<ClientId> = JoinSet::new();
 
+    // TODO(alex) [high]: The client connection works, so all systems keep waiting.
+    tracing::info!("Agent is waiting for client!");
     // We wait for the first client until `communication_timeout` elapses.
     let first_connection = timeout(
         Duration::from_secs(args.communication_timeout.into()),
@@ -587,7 +619,7 @@ async fn start_agent(args: Args) -> Result<()> {
     .await;
     match first_connection {
         Ok(Ok((stream, addr))) => {
-            trace!(peer = %addr, "start_agent -> First connection accepted");
+            info!(peer = %addr, "start_agent -> First connection accepted");
             clients.spawn(state.clone().serve_client_connection(
                 stream,
                 bg_tasks.clone(),
@@ -627,7 +659,7 @@ async fn start_agent(args: Args) -> Result<()> {
             client = clients.join_next() => {
                 match client {
                     Some(Ok(client)) => {
-                        trace!(client, "start_agent -> Client finished");
+                        info!(client, "start_agent -> Client finished");
                     }
 
                     Some(Err(error)) => {
@@ -636,7 +668,7 @@ async fn start_agent(args: Args) -> Result<()> {
                     }
 
                     None => {
-                        trace!("start_agent -> All clients finished, exiting main agent loop");
+                        info!("start_agent -> All clients finished, exiting main agent loop");
                         break
                     }
                 }
@@ -644,7 +676,7 @@ async fn start_agent(args: Args) -> Result<()> {
         }
     }
 
-    trace!("start_agent -> Agent shutting down, dropping cancellation token for background tasks");
+    info!("start_agent -> Agent shutting down, dropping cancellation token for background tasks");
     mem::drop(cancel_guard);
 
     let BackgroundTasks {

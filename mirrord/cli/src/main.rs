@@ -129,6 +129,8 @@ where
             }
         }
     }
+
+    // TODO(alex) [high]: We hit this here, can we send a "die" message to agent from here?
     Err(CliError::BinaryExecuteFailed(binary, binary_args))
 }
 

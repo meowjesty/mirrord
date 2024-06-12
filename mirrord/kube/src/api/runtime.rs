@@ -25,6 +25,7 @@ pub mod deployment;
 pub mod job;
 pub mod pod;
 pub mod rollout;
+pub mod stateful_set;
 
 #[derive(Debug)]
 pub enum ContainerRuntime {
@@ -296,6 +297,7 @@ impl RuntimeDataProvider for Target {
             Target::Pod(pod) => pod.runtime_data(client, namespace).await,
             Target::Rollout(rollout) => rollout.runtime_data(client, namespace).await,
             Target::Job(job) => job.runtime_data(client, namespace).await,
+            Target::StatefulSet(target) => target.runtime_data(client, namespace).await,
             Target::Targetless => Err(KubeApiError::MissingRuntimeData),
         }
     }

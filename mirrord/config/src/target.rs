@@ -6,6 +6,7 @@ use std::{
 use mirrord_analytics::CollectAnalytics;
 use schemars::{gen::SchemaGenerator, schema::SchemaObject, JsonSchema};
 use serde::{Deserialize, Serialize};
+use stateful_set::StatefulSetTarget;
 
 use self::{deployment::DeploymentTarget, job::JobTarget, pod::PodTarget, rollout::RolloutTarget};
 use crate::{
@@ -21,6 +22,7 @@ pub mod deployment;
 pub mod job;
 pub mod pod;
 pub mod rollout;
+pub mod stateful_set;
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, JsonSchema)]
 #[serde(untagged, rename_all = "lowercase", deny_unknown_fields)]
@@ -229,6 +231,12 @@ pub enum Target {
     Job(job::JobTarget),
 
     /// <!--${internal}-->
+    /// Mirror a StatefulSet.
+    ///
+    /// Only supported when `copy_target` is enabled.
+    StatefulSet(stateful_set::StatefulSetTarget),
+
+    /// <!--${internal}-->
     /// Spawn a new pod.
     Targetless,
 }
@@ -248,6 +256,7 @@ impl FromStr for Target {
             Some("rollout") => rollout::RolloutTarget::from_split(&mut split).map(Target::Rollout),
             Some("pod") => pod::PodTarget::from_split(&mut split).map(Target::Pod),
             Some("job") => job::JobTarget::from_split(&mut split).map(Target::Job),
+            Some("statefulset") => stateful_set::StatefulSetTarget::from_split(&mut split).map(Target::StatefulSet),
             _ => Err(ConfigError::InvalidTarget(format!(
                 "Provided target: {target} is unsupported. Did you remember to add a prefix, e.g. pod/{target}? \n{FAIL_PARSE_DEPLOYMENT_OR_POD}",
             ))),
@@ -263,6 +272,7 @@ impl Target {
             Target::Pod(pod) => pod.pod.clone(),
             Target::Rollout(rollout) => rollout.rollout.clone(),
             Target::Job(job) => job.job.clone(),
+            Target::StatefulSet(target) => target.stateful_set.clone(),
             Target::Targetless => {
                 unreachable!("this shouldn't happen - called from operator on a flow where it's not targetless.")
             }
@@ -312,6 +322,7 @@ impl_target_display!(PodTarget, pod);
 impl_target_display!(DeploymentTarget, deployment);
 impl_target_display!(RolloutTarget, rollout);
 impl_target_display!(JobTarget, job);
+impl_target_display!(StatefulSetTarget, stateful_set);
 
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -321,6 +332,7 @@ impl fmt::Display for Target {
             Target::Deployment(dep) => dep.fmt_display(f),
             Target::Rollout(roll) => roll.fmt_display(f),
             Target::Job(job) => job.fmt_display(f),
+            Target::StatefulSet(target) => target.fmt_display(f),
         }
     }
 }
@@ -333,6 +345,7 @@ impl TargetDisplay for Target {
             Target::Pod(x) => x.target_type(),
             Target::Rollout(x) => x.target_type(),
             Target::Job(x) => x.target_type(),
+            Target::StatefulSet(target) => target.target_type(),
         }
     }
 
@@ -343,6 +356,7 @@ impl TargetDisplay for Target {
             Target::Pod(x) => x.target_name(),
             Target::Rollout(x) => x.target_name(),
             Target::Job(x) => x.target_name(),
+            Target::StatefulSet(target) => target.target_name(),
         }
     }
 
@@ -353,6 +367,7 @@ impl TargetDisplay for Target {
             Target::Pod(x) => x.container_name(),
             Target::Rollout(x) => x.container_name(),
             Target::Job(x) => x.container_name(),
+            Target::StatefulSet(target) => target.container_name(),
         }
     }
 }
@@ -367,6 +382,7 @@ bitflags::bitflags! {
         const CONTAINER = 8;
         const ROLLOUT = 16;
         const JOB = 32;
+        const STATEFUL_SET = 128;
     }
 }
 
@@ -399,6 +415,12 @@ impl CollectAnalytics for &TargetConfig {
                 Target::Job(job) => {
                     flags |= TargetAnalyticFlags::JOB;
                     if job.container.is_some() {
+                        flags |= TargetAnalyticFlags::CONTAINER;
+                    }
+                }
+                Target::StatefulSet(target) => {
+                    flags |= TargetAnalyticFlags::STATEFUL_SET;
+                    if target.container.is_some() {
                         flags |= TargetAnalyticFlags::CONTAINER;
                     }
                 }

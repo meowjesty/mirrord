@@ -8,7 +8,7 @@ use mirrord_config::{
     feature::FeatureConfig,
     target::{
         deployment::DeploymentTarget, job::JobTarget, pod::PodTarget, rollout::RolloutTarget,
-        Target, TargetConfig,
+        stateful_set::StatefulSetTarget, Target, TargetConfig,
     },
 };
 use serde::Serialize;
@@ -36,6 +36,9 @@ enum VerifiedTarget {
 
     #[serde(untagged)]
     Job(JobTarget),
+
+    #[serde(untagged)]
+    StatefulSet(StatefulSetTarget),
 }
 
 impl From<Target> for VerifiedTarget {
@@ -45,6 +48,7 @@ impl From<Target> for VerifiedTarget {
             Target::Pod(p) => Self::Pod(p),
             Target::Rollout(r) => Self::Rollout(r),
             Target::Job(j) => Self::Job(j),
+            Target::StatefulSet(target) => Self::StatefulSet(target),
             Target::Targetless => Self::Targetless,
         }
     }

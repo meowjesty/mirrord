@@ -40,6 +40,7 @@ use crate::{
 pub(super) mod hooks;
 pub(crate) mod ops;
 
+// TODO(alex): NEVER LOG STUFF IN LAZYLOCK.
 pub(crate) static SOCKETS: LazyLock<DashMap<RawFd, Arc<UserSocket>>> = LazyLock::new(|| {
     println!("Do we have vars {:?}?", std::process::id());
     std::env::var("MIRRORD_SHARED_SOCKETS")
@@ -54,23 +55,23 @@ pub(crate) static SOCKETS: LazyLock<DashMap<RawFd, Arc<UserSocket>>> = LazyLock:
             )
             .unwrap_or_default();
 
-            println!("We do {decoded:?}");
+            // println!("We do {decoded:?}");
 
             DashMap::from_iter(decoded.into_iter().filter_map(|(fd, socket)| {
                 let is_cloexec = unsafe { FN_FCNTL(fd, libc::F_GETFD) > -1 };
-                tracing::info!(
-                    "socket has flag {is_cloexec:?} sock {:?} {:?} {:?}",
-                    fd,
-                    socket,
-                    errno::errno()
-                );
+                // tracing::info!(
+                //     "socket has flag {is_cloexec:?} sock {:?} {:?} {:?}",
+                //     fd,
+                //     socket,
+                //     errno::errno()
+                // );
 
                 is_cloexec.then(|| (fd, Arc::new(socket)))
                 // Some((fd, Arc::new(socket)))
             }))
         })
-        .inspect(|sockets| tracing::info!("the sockets {:?}: {sockets:?}", std::process::id()))
-        .inspect_err(|fail| tracing::error!("the fail: {fail:?}"))
+        // .inspect(|sockets| tracing::info!("the sockets {:?}: {sockets:?}", std::process::id()))
+        // .inspect_err(|fail| tracing::error!("the fail: {fail:?}"))
         .unwrap_or_default()
 });
 

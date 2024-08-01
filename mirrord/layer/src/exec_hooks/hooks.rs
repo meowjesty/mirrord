@@ -84,7 +84,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
     argv: *const *const c_char,
     envp: *const *const c_char,
 ) -> c_int {
-    use crate::{common::CheckedInto, detour::DetourGuard};
+    use crate::common::CheckedInto;
 
     // let _guard = DetourGuard::new();
 

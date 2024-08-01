@@ -78,7 +78,7 @@ unsafe extern "C" fn execv_detour(path: *const c_char, argv: *const *const c_cha
 ///
 /// We can't change the pointers, to get around that we create our own and **leak** them.
 #[cfg(not(target_os = "macos"))]
-#[hook_fn]
+#[mirrord_layer_macro::hook_fn]
 pub(crate) unsafe extern "C" fn execve_detour(
     path: *const c_char,
     argv: *const *const c_char,
@@ -86,7 +86,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 ) -> c_int {
     use crate::{common::CheckedInto, detour::DetourGuard};
 
-    let _guard = DetourGuard::new();
+    // let _guard = DetourGuard::new();
 
     // Hopefully `envp` is a properly null-terminated list.
     if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {
@@ -141,7 +141,8 @@ pub(crate) unsafe extern "C" fn execve_detour(
 
 /// Enables `exec` hooks.
 pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
-    #[cfg(not(target_os = "macos"))]
+    // TODO(alex) [high]: `execv` by itself is fine.
+    // #[cfg(not(target_os = "macos"))]
     replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
     replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);

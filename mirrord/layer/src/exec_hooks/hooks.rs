@@ -2,8 +2,8 @@ use std::ffi::CString;
 
 use base64::prelude::*;
 use libc::{c_char, c_int};
-// #[cfg(not(target_os = "macos"))]
-// use mirrord_layer_macro::hook_fn;
+#[cfg(not(target_os = "macos"))]
+use mirrord_layer_macro::hook_fn;
 #[cfg(target_os = "macos")]
 use mirrord_layer_macro::hook_guard_fn;
 
@@ -46,33 +46,33 @@ pub(crate) fn prepare_execve_envp(env_vars: Detour<Argv>) -> Detour<Argv> {
     Detour::Success(env_vars)
 }
 
-// #[cfg(not(target_os = "macos"))]
-// unsafe fn environ() -> *const *const c_char {
-//     extern "C" {
-//         static environ: *const *const c_char;
-//     }
+#[cfg(not(target_os = "macos"))]
+unsafe fn environ() -> *const *const c_char {
+    extern "C" {
+        static environ: *const *const c_char;
+    }
 
-//     environ
-// }
+    environ
+}
 
 /// Hook for `libc::execv` for linux only.
 ///
 /// On macos this just calls `execve(path, argv, _environ)`, so we'll be handling it in our
 /// [`execve_detour`].
 // #[cfg(not(target_os = "macos"))]
-// #[hook_fn]
-// unsafe extern "C" fn execv_detour(path: *const c_char, argv: *const *const c_char) -> c_int {
-//     let encoded = bincode::encode_to_vec(shared_sockets(), bincode::config::standard())
-//         .map(|bytes| BASE64_URL_SAFE.encode(bytes))
-//         .unwrap_or_default();
+#[hook_fn]
+unsafe extern "C" fn execv_detour(path: *const c_char, argv: *const *const c_char) -> c_int {
+    let encoded = bincode::encode_to_vec(shared_sockets(), bincode::config::standard())
+        .map(|bytes| BASE64_URL_SAFE.encode(bytes))
+        .unwrap_or_default();
 
-//     // `encoded` is emtpy if the encoding failed, so we don't set the env var.
-//     if !encoded.is_empty() {
-//         std::env::set_var("MIRRORD_SHARED_SOCKETS", encoded);
-//     }
+    // `encoded` is emtpy if the encoding failed, so we don't set the env var.
+    if !encoded.is_empty() {
+        std::env::set_var("MIRRORD_SHARED_SOCKETS", encoded);
+    }
 
-//     FN_EXECVE(path, argv, environ())
-// }
+    FN_EXECVE(path, argv, environ())
+}
 
 /// Hook for `libc::execve`.
 ///
@@ -86,7 +86,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 ) -> c_int {
     use crate::common::CheckedInto;
 
-    let _guard = crate::detour::DetourGuard::new();
+    // let _guard = crate::detour::DetourGuard::new();
 
     // Hopefully `envp` is a properly null-terminated list.
     if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {
@@ -143,7 +143,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     // TODO(alex) [high]: `execv` by itself is fine.
     // #[cfg(not(target_os = "macos"))]
-    // replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
+    replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
-    // replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
+    replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
 }

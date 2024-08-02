@@ -783,7 +783,7 @@ pub(super) fn accept(
     Detour::Success(new_fd)
 }
 
-#[mirrord_layer_macro::instrument(level = "trace")]
+// #[mirrord_layer_macro::instrument(level = "trace")]
 pub(super) fn fcntl(orig_fd: c_int, cmd: c_int, fcntl_fd: i32) -> Result<(), HookError> {
     match cmd {
         libc::F_DUPFD | libc::F_DUPFD_CLOEXEC => dup::<true>(orig_fd, fcntl_fd),

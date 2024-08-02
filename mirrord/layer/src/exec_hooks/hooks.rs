@@ -87,7 +87,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 ) -> c_int {
     use crate::common::CheckedInto;
 
-    // let _guard = crate::detour::DetourGuard::new();
+    let _guard = crate::detour::DetourGuard::new();
 
     // Hopefully `envp` is a properly null-terminated list.
     if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {

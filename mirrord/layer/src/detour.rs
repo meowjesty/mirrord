@@ -16,7 +16,6 @@ use std::{
 
 #[cfg(target_os = "macos")]
 use libc::c_char;
-use tracing::Instrument;
 
 use crate::error::HookError;
 
@@ -48,12 +47,13 @@ thread_local!(
 ///
 /// Prefer relying on the [`Drop`] implementation of [`DetourGuard`] instead.
 pub(super) fn detour_bypass_off() {
-    DETOUR_BYPASS.with(|enabled| {
-        if let Ok(mut bypass) = enabled.try_borrow_mut() {
-            *bypass = false
-        }
-    });
-    // .ok();
+    DETOUR_BYPASS
+        .try_with(|enabled| {
+            if let Ok(mut bypass) = enabled.try_borrow_mut() {
+                *bypass = false
+            }
+        })
+        .ok();
 }
 
 /// Handler for the layer's [`DETOUR_BYPASS`].

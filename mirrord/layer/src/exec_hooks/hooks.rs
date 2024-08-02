@@ -140,6 +140,27 @@ pub(crate) unsafe extern "C" fn execve_detour(
     }
 }
 
+#[hook_fn]
+pub(crate) unsafe extern "C" fn posix_spawn_detour(
+    pid: *const libc::pid_t,
+    path: *const c_char,
+    file_actions: *const std::ffi::c_void,
+    attrp: *const std::ffi::c_void,
+    argv: *const *const c_char,
+    envp: *const *const c_char,
+) -> c_int {
+    use crate::common::CheckedInto;
+
+    // let _guard = crate::detour::DetourGuard::new();
+
+    // Hopefully `envp` is a properly null-terminated list.
+    if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {
+        FN_POSIX_SPAWN(pid, path, file_actions, attrp, argv, envp.leak())
+    } else {
+        FN_POSIX_SPAWN(pid, path, file_actions, attrp, argv, envp)
+    }
+}
+
 /// Enables `exec` hooks.
 pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     // TODO(alex) [high]: `execv` by itself is fine.
@@ -147,4 +168,11 @@ pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
     replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
+    replace!(
+        hook_manager,
+        "posix_spawn",
+        posix_spawn_detour,
+        FnPosix_spawn,
+        FN_POSIX_SPAWN
+    );
 }

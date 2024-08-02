@@ -86,7 +86,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 ) -> c_int {
     use crate::common::CheckedInto;
 
-    // let _guard = DetourGuard::new();
+    let _guard = crate::detour::DetourGuard::new();
 
     // Hopefully `envp` is a properly null-terminated list.
     if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {
@@ -145,5 +145,5 @@ pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     // #[cfg(not(target_os = "macos"))]
     // replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
-    replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
+    // replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
 }

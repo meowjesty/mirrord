@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::ffi::CString;
 
 use base64::prelude::*;
@@ -143,7 +144,7 @@ pub(crate) unsafe extern "C" fn execve_detour(
 pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     // TODO(alex) [high]: `execv` by itself is fine.
     // #[cfg(not(target_os = "macos"))]
-    replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
+    // replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
     replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
 }

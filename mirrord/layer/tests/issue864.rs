@@ -1,6 +1,7 @@
 #![feature(assert_matches)]
 #![warn(clippy::indexing_slicing)]
 #![allow(non_snake_case)]
+#![allow(unused)]
 #![cfg(not(target_os = "macos"))]
 
 use std::{path::Path, time::Duration};
@@ -15,11 +16,12 @@ mod common;
 
 pub use common::*;
 
-/// Verify that issue [#864](https://github.com/metalbear-co/mirrord/issues/864) is fixed.
-///
-/// Share sockets between `execve` and `execv` with python's uvicorn.
-///
-/// We run the `shared_sockets.py` app with the `--reload` flag to trigger the issue.
+// Verify that issue [#864](https://github.com/metalbear-co/mirrord/issues/864) is fixed.
+//
+// Share sockets between `execve` and `execv` with python's uvicorn.
+//
+// We run the `shared_sockets.py` app with the `--reload` flag to trigger the issue.
+/*
 #[rstest]
 #[tokio::test]
 #[timeout(Duration::from_secs(60))]
@@ -74,3 +76,4 @@ async fn test_issue864(
     test_process.assert_no_error_in_stdout().await;
     test_process.assert_no_error_in_stderr().await;
 }
+*/

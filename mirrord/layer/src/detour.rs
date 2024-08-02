@@ -10,11 +10,13 @@ use core::{
     ops::{FromResidual, Residual, Try},
 };
 use std::{
-    cell::RefCell, ffi::CString, ops::Deref, os::unix::prelude::*, path::PathBuf, sync::OnceLock,
+    cell::RefCell, ffi::CString, mem::ManuallyDrop, ops::Deref, os::unix::prelude::*,
+    path::PathBuf, sync::OnceLock,
 };
 
 #[cfg(target_os = "macos")]
 use libc::c_char;
+use tracing::Instrument;
 
 use crate::error::HookError;
 
@@ -39,7 +41,7 @@ thread_local!(
     ///
     /// We set this to `true` whenever an operation may require calling other [`libc`] functions,
     /// and back to `false` after it's done.
-    static DETOUR_BYPASS: RefCell<bool> = const { RefCell::new(false) }
+    static DETOUR_BYPASS: ManuallyDrop<RefCell<bool>> = const { ManuallyDrop::new(RefCell::new(false)) }
 );
 
 /// Sets [`DETOUR_BYPASS`] to `false`.
@@ -51,6 +53,7 @@ pub(super) fn detour_bypass_off() {
             *bypass = false
         }
     });
+    // .ok();
 }
 
 /// Handler for the layer's [`DETOUR_BYPASS`].
@@ -66,18 +69,23 @@ pub(crate) struct DetourGuard;
 impl DetourGuard {
     /// Create a new DetourGuard if it's not already enabled.
     pub(crate) fn new() -> Option<Self> {
-        DETOUR_BYPASS.with(|enabled| {
-            if let Ok(bypass) = enabled.try_borrow()
-                && *bypass
-            {
-                None
-            } else if let Ok(mut bypass) = enabled.try_borrow_mut() {
-                *bypass = true;
-                Some(Self)
-            } else {
-                None
-            }
-        })
+        let x = DETOUR_BYPASS
+            .try_with(|enabled| {
+                if let Ok(bypass) = enabled.try_borrow()
+                    && *bypass
+                {
+                    None
+                } else if let Ok(mut bypass) = enabled.try_borrow_mut() {
+                    *bypass = true;
+                    Some(Self)
+                } else {
+                    None
+                }
+            })
+            .ok()
+            .flatten();
+
+        x
     }
 }
 

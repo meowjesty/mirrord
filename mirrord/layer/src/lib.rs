@@ -288,6 +288,7 @@ fn init_tracing() {
                     .with_thread_ids(true)
                     .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
                     .compact()
+                    .without_time()
                     .with_writer(std::io::stderr),
             )
             .with(tracing_subscriber::EnvFilter::from_default_env())

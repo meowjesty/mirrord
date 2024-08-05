@@ -8,6 +8,7 @@ use std::{
 
 use dashmap::DashMap;
 use mirrord_protocol::file::{CloseDirRequest, DirEntryInternal, ReadDirRequest, ReadDirResponse};
+use tracing::Level;
 
 use super::{DirStreamFd, LocalFd, RemoteFd, OPEN_FILES};
 use crate::{
@@ -46,6 +47,7 @@ impl OpenDirs {
     }
 
     /// Reads next entry from the open directory with the given [`DirStreamFd`].
+    #[tracing::instrument(level = Level::DEBUG, skip(self), ret)]
     pub fn read_r(&self, local_dir_fd: DirStreamFd) -> Detour<Option<DirEntryInternal>> {
         let dir = self
             .inner
@@ -83,6 +85,7 @@ impl OpenDirs {
     /// 3. Consecutive calls of this method overwrite the buffer.
     ///
     /// Given above, the returned pointer is good enough to be used as a result of `readdir`.
+    #[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
     pub fn read(&self, local_dir_fd: DirStreamFd) -> Detour<*const libc::dirent> {
         let dir = self
             .inner
@@ -114,6 +117,7 @@ impl OpenDirs {
     ///
     /// Given above, the returned pointer is good enough to be used as a result of `readdir64`.
     #[cfg(target_os = "linux")]
+    #[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
     pub fn read64(&self, local_dir_fd: DirStreamFd) -> Detour<*const libc::dirent64> {
         let dir = self
             .inner
@@ -199,6 +203,9 @@ impl OpenDir {
         }
     }
 
+    // TODO(alex) [high]: The bottleneck is here!
+    // Also, maybe rename `OpenDirs`? Got me confused.
+    #[tracing::instrument(level = Level::DEBUG, skip(self), ret)]
     fn read_r(&self) -> Detour<Option<DirEntryInternal>> {
         if self.closed {
             // This thread got this struct from `OpenDirs` before `close` removed it.

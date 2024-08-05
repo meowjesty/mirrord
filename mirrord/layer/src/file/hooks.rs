@@ -26,9 +26,9 @@ use mirrord_protocol::file::{
 #[cfg(target_os = "linux")]
 use mirrord_protocol::ResponseError::{NotDirectory, NotFound};
 use num_traits::Bounded;
-use tracing::trace;
 #[cfg(target_os = "linux")]
 use tracing::{error, info, warn};
+use tracing::{trace, Level};
 
 use super::{open_dirs, ops::*, OpenOptionsInternalExt};
 #[cfg(target_os = "linux")]
@@ -146,6 +146,7 @@ pub(super) unsafe extern "C" fn open_nocancel_detour(
 /// Opens the directory with `read` permission using the [`open_logic`] flow, then calls
 /// [`fdopendir`] to convert the [`RawFd`] into a `*DIR` stream (which we treat as `usize`).
 #[hook_guard_fn]
+#[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
 pub(super) unsafe extern "C" fn opendir_detour(raw_filename: *const c_char) -> usize {
     open_logic(raw_filename, O_RDONLY, O_DIRECTORY)
         .and_then(|fd| match fdopendir(fd) {
@@ -199,6 +200,7 @@ pub(crate) unsafe extern "C" fn fdopendir_detour(fd: RawFd) -> usize {
 }
 
 #[hook_guard_fn]
+#[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
 pub(crate) unsafe extern "C" fn readdir_r_detour(
     dirp: *mut DIR,
     entry: *mut dirent,
@@ -230,6 +232,7 @@ pub(crate) unsafe extern "C" fn readdir_r_detour(
 
 #[cfg(target_os = "linux")]
 #[hook_guard_fn]
+#[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
 pub(crate) unsafe extern "C" fn readdir64_r_detour(
     dirp: *mut DIR,
     entry: *mut dirent64,
@@ -261,6 +264,7 @@ pub(crate) unsafe extern "C" fn readdir64_r_detour(
 
 #[cfg(target_os = "linux")]
 #[hook_guard_fn]
+#[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
 pub(crate) unsafe extern "C" fn readdir64_detour(dirp: *mut DIR) -> usize {
     match OPEN_DIRS.read64(dirp as usize) {
         Detour::Success(entry) => entry as usize,
@@ -273,6 +277,7 @@ pub(crate) unsafe extern "C" fn readdir64_detour(dirp: *mut DIR) -> usize {
 }
 
 #[hook_guard_fn]
+#[tracing::instrument(level = Level::DEBUG, skip_all, ret)]
 pub(crate) unsafe extern "C" fn readdir_detour(dirp: *mut DIR) -> usize {
     match OPEN_DIRS.read(dirp as usize) {
         Detour::Success(entry) => entry as usize,

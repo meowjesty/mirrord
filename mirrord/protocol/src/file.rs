@@ -386,8 +386,18 @@ pub struct ReadDirRequest {
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub struct ReadDirBatchRequest {
+    pub remote_fd: u64,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
 pub struct ReadDirResponse {
     pub direntry: Option<DirEntryInternal>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub struct ReadDirBatchResponse {
+    pub entries: Vec<DirEntryInternal>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]

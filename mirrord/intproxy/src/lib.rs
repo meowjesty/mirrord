@@ -1,6 +1,10 @@
 #![warn(clippy::indexing_slicing)]
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, OnceLock},
+    time::Duration,
+};
 
 use background_tasks::{BackgroundTasks, TaskSender, TaskUpdate};
 use layer_conn::LayerConnection;
@@ -14,6 +18,7 @@ use proxies::{
     outgoing::{OutgoingProxy, OutgoingProxyMessage},
     simple::{SimpleProxy, SimpleProxyMessage},
 };
+use semver::Version;
 use tokio::{net::TcpListener, time};
 
 use crate::{
@@ -31,6 +36,8 @@ mod ping_pong;
 mod proxies;
 mod remote_resources;
 mod request_queue;
+
+pub static MIRRORD_HANDSHAKE_PROTOCOL_VERSION: OnceLock<Version> = OnceLock::new();
 
 /// [`TaskSender`]s for main background tasks. See [`MainTaskId`].
 struct TaskTxs {
@@ -299,6 +306,8 @@ impl IntProxy {
                 if CLIENT_READY_FOR_LOGS.matches(&protocol_version) {
                     self.task_txs.agent.send(ClientMessage::ReadyForLogs).await;
                 }
+
+                MIRRORD_HANDSHAKE_PROTOCOL_VERSION.set(protocol_version.clone());
 
                 self.task_txs
                     .incoming

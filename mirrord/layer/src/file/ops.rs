@@ -10,7 +10,7 @@ use mirrord_protocol::file::{
     ReadLinkFileResponse, SeekFileResponse, WriteFileResponse, XstatFsResponse, XstatResponse,
 };
 use rand::distributions::{Alphanumeric, DistString};
-use tracing::{error, trace};
+use tracing::{error, trace, Level};
 
 use super::{hooks::FN_OPEN, open_dirs::OPEN_DIRS, *};
 #[cfg(target_os = "linux")]
@@ -198,7 +198,7 @@ pub(crate) fn open(path: Detour<PathBuf>, open_options: OpenOptionsInternal) -> 
 }
 
 /// creates a directory stream for the `remote_fd` in the agent
-#[mirrord_layer_macro::instrument(level = "trace", ret)]
+#[mirrord_layer_macro::instrument(level = Level::DEBUG, ret)]
 pub(crate) fn fdopendir(fd: RawFd) -> Detour<usize> {
     // usize == ptr size
     // we don't return a pointer to an address that contains DIR

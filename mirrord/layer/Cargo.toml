@@ -35,6 +35,7 @@ frida-gum = { version = "0.13", features = ["auto-download"] }
 
 serde.workspace = true
 serde_json.workspace = true
+semver = { workspace = true, features = ["serde"] }
 
 bytes.workspace = true
 thiserror.workspace = true

@@ -111,6 +111,12 @@ pub struct OperatorSession {
     operator_protocol_version: Option<Version>,
 }
 
+impl OperatorSession {
+    pub fn protocol_version(&self) -> Option<&Version> {
+        self.operator_protocol_version.as_ref()
+    }
+}
+
 impl fmt::Debug for OperatorSession {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OperatorSession")

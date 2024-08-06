@@ -69,10 +69,11 @@ extern crate core;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
+    env,
     net::SocketAddr,
     os::unix::process::parent_id,
     panic,
-    sync::OnceLock,
+    sync::{LazyLock, OnceLock},
     time::Duration,
 };
 
@@ -88,10 +89,12 @@ use mirrord_config::{
     feature::{fs::FsModeConfig, network::incoming::IncomingMode},
     LayerConfig,
 };
+use mirrord_intproxy::agent_conn::AgentConnectInfo;
 use mirrord_intproxy_protocol::NewSessionRequest;
 use mirrord_layer_macro::{hook_fn, hook_guard_fn};
 use mirrord_protocol::{EnvVars, GetEnvVarsRequest};
 use proxy_connection::ProxyConnection;
+use semver::Version;
 use setup::LayerSetup;
 use socket::SOCKETS;
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
@@ -248,8 +251,13 @@ fn load_only_layer_start(config: &LayerConfig) {
         // Called only from library constructor.
         PROXY_CONNECTION
             .set(new_connection)
-            .expect("setting PROXY_CONNECTION singleton")
+            .expect("setting PROXY_CONNECTION singleton");
     }
+
+    let agent_connect_info: Option<Version> = env::var("MIRRORD_AGENT_CONNECT_INFO")
+        .ok()
+        .and_then(|var| serde_json::from_str(&var).ok())
+        .map(AgentConnectInfo::version);
 }
 
 /// The one true start of mirrord-layer.

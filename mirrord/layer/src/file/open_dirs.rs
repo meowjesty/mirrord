@@ -5,9 +5,14 @@ use std::{
     collections::HashMap,
     ffi::CString,
     sync::{Arc, LazyLock, Mutex},
+    vec::IntoIter,
 };
 
-use mirrord_protocol::file::{CloseDirRequest, DirEntryInternal, ReadDirRequest, ReadDirResponse};
+use mirrord_intproxy::MIRRORD_HANDSHAKE_PROTOCOL_VERSION;
+use mirrord_protocol::file::{
+    CloseDirRequest, DirEntryInternal, ReadDirBatchRequest, ReadDirBatchResponse, ReadDirRequest,
+    ReadDirResponse,
+};
 use tracing::Level;
 
 use super::{DirStreamFd, LocalFd, RemoteFd, OPEN_FILES};
@@ -18,14 +23,14 @@ use crate::{
 };
 
 /// Global instance of [`OpenDirs`]. Used in hooks.
-pub static OPEN_DIRS: LazyLock<OpenDirs> = LazyLock::new(OpenDirs::new);
+pub static OPEN_DIRS: LazyLock<Dirs> = LazyLock::new(Dirs::new);
 
 /// State related to open remote directories.
-pub struct OpenDirs {
-    inner: Mutex<HashMap<DirStreamFd, Arc<Mutex<OpenDir>>>>,
+pub struct Dirs {
+    inner: Mutex<HashMap<DirStreamFd, Arc<Mutex<Dir>>>>,
 }
 
-impl OpenDirs {
+impl Dirs {
     /// Creates an empty state.
     fn new() -> Self {
         Self {
@@ -47,7 +52,7 @@ impl OpenDirs {
     ) -> Detour<()> {
         self.inner.lock()?.insert(
             local_dir_fd,
-            Mutex::new(OpenDir::new(local_dir_fd, remote_fd, base_fd)).into(),
+            Mutex::new(Dir::new(local_dir_fd, remote_fd, base_fd)).into(),
         );
         Detour::Success(())
     }
@@ -62,7 +67,7 @@ impl OpenDirs {
             .ok_or(Bypass::LocalDirStreamNotFound(local_dir_fd))?
             .clone();
 
-        let guard = dir.lock().expect("lock poisoned");
+        let mut guard = dir.lock().expect("lock poisoned");
 
         guard.read_r()
     }
@@ -165,7 +170,7 @@ impl OpenDirs {
     }
 }
 
-struct OpenDir {
+struct Dir {
     closed: bool,
     local_fd: DirStreamFd,
     remote_fd: RemoteFd,
@@ -174,9 +179,10 @@ struct OpenDir {
     dirent: libc::dirent,
     #[cfg(target_os = "linux")]
     dirent64: libc::dirent64,
+    entries: Option<IntoIter<DirEntryInternal>>,
 }
 
-impl OpenDir {
+impl Dir {
     fn new(local_fd: DirStreamFd, remote_fd: RemoteFd, base_fd: LocalFd) -> Self {
         #[cfg(not(target_os = "macos"))]
         let dirent = libc::dirent {
@@ -211,23 +217,47 @@ impl OpenDir {
                 d_type: 0,
                 d_name: [0; 256],
             },
+            entries: Default::default(),
         }
     }
 
     // TODO(alex) [high]: The bottleneck is here!
     // Also, maybe rename `OpenDirs`? Got me confused.
     #[tracing::instrument(level = Level::DEBUG, skip(self), ret)]
-    fn read_r(&self) -> Detour<Option<DirEntryInternal>> {
+    fn read_r(&mut self) -> Detour<Option<DirEntryInternal>> {
         if self.closed {
             // This thread got this struct from `OpenDirs` before `close` removed it.
             return Detour::Bypass(Bypass::LocalDirStreamNotFound(self.local_fd));
         }
 
-        let ReadDirResponse { direntry } =
-            common::make_proxy_request_with_response(ReadDirRequest {
-                remote_fd: self.remote_fd,
-            })??;
-        Detour::Success(direntry)
+        // TODO(alex) [mid]: Do it based on agent version?
+        let entry = if MIRRORD_HANDSHAKE_PROTOCOL_VERSION
+            .get()
+            .is_some_and(|version| version.major > 0)
+        {
+            if let Some(entries) = self.entries.as_mut() {
+                entries.next()
+            } else {
+                let ReadDirBatchResponse { entries } =
+                    common::make_proxy_request_with_response(ReadDirBatchRequest {
+                        remote_fd: self.remote_fd,
+                    })??;
+
+                let iterator = entries.into_iter();
+                self.entries = Some(iterator);
+
+                self.entries.as_mut()?.next()
+            }
+        } else {
+            let ReadDirResponse { direntry } =
+                common::make_proxy_request_with_response(ReadDirRequest {
+                    remote_fd: self.remote_fd,
+                })??;
+
+            direntry
+        };
+
+        Detour::Success(entry)
     }
 
     fn get_base_fd(&self) -> LocalFd {

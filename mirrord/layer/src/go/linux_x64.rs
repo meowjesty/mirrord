@@ -312,13 +312,13 @@ unsafe extern "C" fn c_abi_syscall_handler(
     param2: i64,
     param3: i64,
 ) -> i64 {
-    trace!(
-        "c_abi_syscall_handler: syscall={} param1={} param2={} param3={}",
-        syscall,
-        param1,
-        param2,
-        param3
-    );
+    // trace!(
+    //     "c_abi_syscall_handler: syscall={} param1={} param2={} param3={}",
+    //     syscall,
+    //     param1,
+    //     param2,
+    //     param3
+    // );
     let syscall_result = match syscall {
         libc::SYS_socket => socket_detour(param1 as _, param2 as _, param3 as _) as i64,
         libc::SYS_bind => bind_detour(param1 as _, param2 as _, param3 as _) as i64,

@@ -240,7 +240,7 @@ pub(super) unsafe extern "C" fn dup2_detour(oldfd: c_int, newfd: c_int) -> c_int
 
 #[cfg(target_os = "linux")]
 #[hook_guard_fn]
-pub(super) unsafe extern "C" fn dup3_detour(oldfd: c_int, newfd: c_int, flags: c_int) -> c_int {
+pub(crate) unsafe extern "C" fn dup3_detour(oldfd: c_int, newfd: c_int, flags: c_int) -> c_int {
     let dup3_result = FN_DUP3(oldfd, newfd, flags);
 
     if dup3_result == -1 {

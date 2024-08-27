@@ -607,14 +607,15 @@ pub(crate) unsafe extern "C" fn close_detour(fd: c_int) -> c_int {
 ///
 /// on macOS, be wary what we do in this path as we might trigger <https://github.com/metalbear-co/mirrord/issues/1745>
 #[hook_guard_fn]
+#[mirrord_layer_macro::instrument(level = Level::TRACE)]
 pub(crate) unsafe extern "C" fn fork_detour() -> pid_t {
-    tracing::debug!("Process {} forking!.", std::process::id());
+    // tracing::debug!("Process {} forking!.", std::process::id());
 
     let res = FN_FORK();
 
     match res.cmp(&0) {
         Ordering::Equal => {
-            tracing::debug!("Child process initializing layer.");
+            // tracing::debug!("Child process initializing layer.");
             let parent_connection = match unsafe { PROXY_CONNECTION.take() } {
                 Some(conn) => conn,
                 None => {
@@ -638,8 +639,10 @@ pub(crate) unsafe extern "C" fn fork_detour() -> pid_t {
             // but side effect should be trivial
             std::mem::forget(parent_connection);
         }
-        Ordering::Greater => tracing::debug!("Child process id is {res}."),
-        Ordering::Less => tracing::debug!("fork failed"),
+        Ordering::Greater => (),
+        // tracing::debug!("Child process id is {res}."),
+        Ordering::Less => (),
+        // tracing::debug!("fork failed"),
     }
 
     res

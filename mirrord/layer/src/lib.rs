@@ -509,13 +509,14 @@ fn enable_hooks(state: &LayerSetup) {
             FN___CLOSE_NOCANCEL
         );
 
-        replace!(
-            &mut hook_manager,
-            "__close",
-            __close_detour,
-            Fn__close,
-            FN___CLOSE
-        );
+        // TODO(alex) [high]: 1. It's this one!
+        // replace!(
+        //     &mut hook_manager,
+        //     "__close",
+        //     __close_detour,
+        //     Fn__close,
+        //     FN___CLOSE
+        // );
 
         // Solve leak on uvloop which calls the syscall directly.
         #[cfg(target_os = "linux")]
@@ -532,7 +533,8 @@ fn enable_hooks(state: &LayerSetup) {
         replace!(&mut hook_manager, "fork", fork_detour, FnFork, FN_FORK);
     };
 
-    unsafe { socket::hooks::enable_socket_hooks(&mut hook_manager, enabled_remote_dns) };
+    // TODO(alex) [high]: 2. It's this one (also breaks)!
+    // unsafe { socket::hooks::enable_socket_hooks(&mut hook_manager, enabled_remote_dns) };
 
     if cfg!(target_os = "macos") || state.experimental().enable_exec_hooks_linux {
         unsafe { exec_hooks::hooks::enable_exec_hooks(&mut hook_manager) };
@@ -550,9 +552,10 @@ fn enable_hooks(state: &LayerSetup) {
         }
     }
 
-    if enabled_file_ops {
-        unsafe { file::hooks::enable_file_hooks(&mut hook_manager) };
-    }
+    // TODO(alex) [high]: 3. It's this one (also breaks)!
+    // if enabled_file_ops {
+    //     unsafe { file::hooks::enable_file_hooks(&mut hook_manager) };
+    // }
 
     #[cfg(all(
         any(target_arch = "x86_64", target_arch = "aarch64"),

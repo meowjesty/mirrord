@@ -29,17 +29,17 @@ unsafe extern "C" fn c_abi_syscall6_handler(
     param5: i64,
     param6: i64,
 ) -> i64 {
-    trace!(
-        "c_abi_syscall6_handler: syscall={} param1={} param2={} param3={} param4={} param5={}
-    param6={}",
-        syscall,
-        param1,
-        param2,
-        param3,
-        param4,
-        param5,
-        param6
-    );
+    // trace!(
+    //     "c_abi_syscall6_handler: syscall={} param1={} param2={} param3={} param4={} param5={}
+    // param6={}",
+    //     syscall,
+    //     param1,
+    //     param2,
+    //     param3,
+    //     param4,
+    //     param5,
+    //     param6
+    // );
     let syscall_result = match syscall {
         libc::SYS_accept4 => {
             accept4_detour(param1 as _, param2 as _, param3 as _, param4 as _) as i64
@@ -50,7 +50,10 @@ unsafe extern "C" fn c_abi_syscall6_handler(
         libc::SYS_accept => accept_detour(param1 as _, param2 as _, param3 as _) as i64,
         libc::SYS_close => close_detour(param1 as _) as i64,
         libc::SYS_connect => connect_detour(param1 as _, param2 as _, param3 as _) as i64,
-        libc::SYS_dup3 => dup3_detour(param1 as _, param2 as _, param3 as _) as i64,
+        libc::SYS_dup3 => {
+            // trace!("292");
+            dup3_detour(param1 as _, param2 as _, param3 as _) as i64
+        }
 
         _ if crate::setup().fs_config().is_active() => {
             match syscall {

@@ -4,7 +4,8 @@ use errno::errno;
 use tracing::trace;
 
 use crate::{
-    close_detour, file::hooks::*, hooks::HookManager, macros::hook_symbol, socket::hooks::*,
+    close_detour, file::hooks::*, fork_detour, hooks::HookManager, macros::hook_symbol,
+    socket::hooks::*, vfork_detour,
 };
 /*
  * Reference for which syscalls are managed by the handlers:
@@ -326,6 +327,8 @@ unsafe extern "C" fn c_abi_syscall_handler(
         libc::SYS_connect => connect_detour(param1 as _, param2 as _, param3 as _) as i64,
         libc::SYS_accept => accept_detour(param1 as _, param2 as _, param3 as _) as i64,
         libc::SYS_close => close_detour(param1 as _) as i64,
+        libc::SYS_fork => fork_detour() as i64,
+        libc::SYS_vfork => vfork_detour() as i64,
 
         _ if crate::setup().fs_config().is_active() => match syscall {
             libc::SYS_read => read_detour(param1 as _, param2 as _, param3 as _) as i64,

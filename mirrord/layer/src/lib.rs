@@ -484,7 +484,7 @@ fn sip_only_layer_start(mut config: LayerConfig, patch_binaries: Vec<String>) {
 /// - `enabled_remote_dns`: replaces [`libc::getaddrinfo`] and [`libc::freeaddrinfo`] when this is
 ///   `true`, see [`NetworkConfig`](mirrord_config::feature::network::NetworkConfig), and
 ///   [`hooks::enable_socket_hooks`](socket::hooks::enable_socket_hooks).
-#[mirrord_layer_macro::instrument(level = Level::TRACE)]
+// #[mirrord_layer_macro::instrument(level = Level::TRACE, fields(pid = std::process::id()))]
 fn enable_hooks(state: &LayerSetup) {
     let enabled_file_ops = state.fs_config().is_active();
     let enabled_remote_dns = state.remote_dns_enabled();
@@ -530,12 +530,14 @@ fn enable_hooks(state: &LayerSetup) {
         };
 
         replace!(&mut hook_manager, "fork", fork_detour, FnFork, FN_FORK);
+        replace!(&mut hook_manager, "vfork", vfork_detour, FnVfork, FN_VFORK);
     };
 
     unsafe { socket::hooks::enable_socket_hooks(&mut hook_manager, enabled_remote_dns) };
 
+    unsafe { exec_hooks::hooks::enable_exec_hooks(&mut hook_manager) };
     if cfg!(target_os = "macos") || state.experimental().enable_exec_hooks_linux {
-        unsafe { exec_hooks::hooks::enable_exec_hooks(&mut hook_manager) };
+        // unsafe { exec_hooks::hooks::enable_exec_hooks(&mut hook_manager) };
     }
 
     #[cfg(target_os = "macos")]
@@ -571,7 +573,6 @@ fn enable_hooks(state: &LayerSetup) {
 ///
 /// Removes the `fd` key from either [`SOCKETS`] or [`OPEN_FILES`].
 /// **DON'T ADD LOGS HERE SINCE CALLER MIGHT CLOSE STDOUT/STDERR CAUSING THIS TO CRASH**
-#[mirrord_layer_macro::instrument(level = "trace", fields(pid = std::process::id()))]
 pub(crate) fn close_layer_fd(fd: c_int) {
     // Remove from sockets.
     if let Some(socket) = SOCKETS.lock().expect("SOCKETS lock failed").remove(&fd) {
@@ -640,6 +641,45 @@ pub(crate) unsafe extern "C" fn fork_detour() -> pid_t {
         }
         Ordering::Greater => tracing::debug!("Child process id is {res}."),
         Ordering::Less => tracing::debug!("fork failed"),
+    }
+
+    res
+}
+
+#[hook_guard_fn]
+pub(crate) unsafe extern "C" fn vfork_detour() -> pid_t {
+    tracing::debug!("Process {} vforking!.", std::process::id());
+
+    let res = FN_VFORK();
+
+    match res.cmp(&0) {
+        Ordering::Equal => {
+            tracing::debug!("Child process initializing layer.");
+            let parent_connection = match unsafe { PROXY_CONNECTION.take() } {
+                Some(conn) => conn,
+                None => {
+                    tracing::debug!("Skipping new inptroxy connection (trace only)");
+                    return res;
+                }
+            };
+
+            let new_connection = ProxyConnection::new(
+                parent_connection.proxy_addr(),
+                NewSessionRequest::Forked(parent_connection.layer_id()),
+                PROXY_CONNECTION_TIMEOUT,
+            )
+            .expect("failed to establish proxy connection for child");
+            PROXY_CONNECTION
+                .set(new_connection)
+                .expect("Failed setting PROXY_CONNECTION in child vfork");
+            // in macOS (and tbh sounds logical) we can't just drop the old connection in the child,
+            // as it needs to access a mutex with invalid state, so we need to forget it.
+            // better implementation would be to somehow close the underlying connections
+            // but side effect should be trivial
+            std::mem::forget(parent_connection);
+        }
+        Ordering::Greater => tracing::debug!("Child process id is {res}."),
+        Ordering::Less => tracing::debug!("vfork failed"),
     }
 
     res

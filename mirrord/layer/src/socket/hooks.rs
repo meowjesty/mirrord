@@ -222,6 +222,9 @@ pub(super) unsafe extern "C" fn dup_detour(fd: c_int) -> c_int {
 
 #[hook_guard_fn]
 pub(super) unsafe extern "C" fn dup2_detour(oldfd: c_int, newfd: c_int) -> c_int {
+    // TODO(alex) [high] 2: Looks like changing the `newfd` value breaks things.
+    // In the C sample, it hangs the child?
+    let newfd = newfd;
     if oldfd == newfd {
         return newfd;
     }
@@ -240,7 +243,11 @@ pub(super) unsafe extern "C" fn dup2_detour(oldfd: c_int, newfd: c_int) -> c_int
 
 #[cfg(target_os = "linux")]
 #[hook_guard_fn]
-pub(super) unsafe extern "C" fn dup3_detour(oldfd: c_int, newfd: c_int, flags: c_int) -> c_int {
+pub(crate) unsafe extern "C" fn dup3_detour(oldfd: c_int, newfd: c_int, flags: c_int) -> c_int {
+    // TODO(alex) [high-3]: It only errors out on the third dup3, which happens for stderr,
+    // so `newfd == 2`. If I make this dumb change here, then it crashes, but works.
+    tracing::info!("old {oldfd} new {newfd}");
+    let newfd = if newfd == 2 { newfd + 20 } else { newfd };
     let dup3_result = FN_DUP3(oldfd, newfd, flags);
 
     if dup3_result == -1 {

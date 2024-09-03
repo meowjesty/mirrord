@@ -51,7 +51,7 @@ macro_rules! replace {
                 hook_manager.hook_export_or_any(symbol_name, detour as *mut libc::c_void)?;
             let original_fn: $detour_type = std::mem::transmute(replaced);
 
-            tracing::trace!("hooked {symbol_name:?}");
+            // tracing::trace!("hooked {symbol_name:?}");
             Ok(original_fn)
         };
 

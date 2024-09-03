@@ -84,6 +84,11 @@ pub(crate) unsafe extern "C" fn execve_detour(
     envp: *const *const c_char,
 ) -> c_int {
     if let Detour::Success(envp) = prepare_execve_envp(envp.checked_into()) {
+        // TODO(alex) [high] 1: In vscode, we crash here due to `HookFn::unwrap` missing
+        // the `FN_EXECVE`, we're not properly hooking it?
+        //
+        // If I change to `libc::execve`, then it crashes in the same way as cli, which
+        // is unrelated to `unwrap` or rust.
         FN_EXECVE(path, argv, envp.leak())
     } else {
         FN_EXECVE(path, argv, envp)
@@ -129,8 +134,18 @@ pub(crate) unsafe extern "C" fn execve_detour(
                 _ => FN_EXECVE(path.into_raw().cast_const(), argv.leak(), envp.leak()),
             }
         }
-        _ => FN_EXECVE(path, argv, envp),
+        _ => {
+            tracing::info!("calling original");
+
+            FN_EXECVE(path, argv, envp)
+        }
     }
+}
+
+#[mirrord_layer_macro::hook_guard_fn]
+pub(crate) unsafe extern "C" fn pipe2_detour(pipefd: *const c_int, flags: c_int) -> c_int {
+    tracing::debug!("pipe2");
+    FN_PIPE2(pipefd, flags)
 }
 
 /// Enables `exec` hooks.
@@ -139,4 +154,5 @@ pub(crate) unsafe fn enable_exec_hooks(hook_manager: &mut HookManager) {
     replace!(hook_manager, "execv", execv_detour, FnExecv, FN_EXECV);
 
     replace!(hook_manager, "execve", execve_detour, FnExecve, FN_EXECVE);
+    replace!(hook_manager, "pipe2", pipe2_detour, FnPipe2, FN_PIPE2);
 }

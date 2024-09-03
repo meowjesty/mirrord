@@ -5,7 +5,14 @@
 use errno::errno;
 use tracing::trace;
 
-use crate::{close_detour, file::hooks::*, socket::hooks::*};
+use crate::{
+    close_detour,
+    exec_hooks::hooks::{execve_detour, pipe2_detour},
+    file::hooks::*,
+    fork_detour,
+    socket::hooks::*,
+    vfork_detour,
+};
 
 #[cfg_attr(
     all(target_os = "linux", target_arch = "x86_64"),
@@ -29,7 +36,7 @@ unsafe extern "C" fn c_abi_syscall6_handler(
     param5: i64,
     param6: i64,
 ) -> i64 {
-    trace!(
+    tracing::info!(
         "c_abi_syscall6_handler: syscall={} param1={} param2={} param3={} param4={} param5={} param6={}",
         syscall, param1, param2, param3, param4, param5, param6
     );
@@ -43,6 +50,14 @@ unsafe extern "C" fn c_abi_syscall6_handler(
         libc::SYS_accept => accept_detour(param1 as _, param2 as _, param3 as _) as i64,
         libc::SYS_close => close_detour(param1 as _) as i64,
         libc::SYS_connect => connect_detour(param1 as _, param2 as _, param3 as _) as i64,
+        libc::SYS_dup3 => dup3_detour(param1 as _, param2 as _, param3 as _) as i64,
+        libc::SYS_fcntl => fcntl_detour(param1 as _, param2 as _) as i64,
+        libc::SYS_execve if crate::setup().experimental().enable_exec_hooks_linux => {
+            execve_detour(param1 as _, param2 as _, param3 as _) as i64
+        }
+        libc::SYS_fork => fork_detour() as i64,
+        libc::SYS_vfork => vfork_detour() as i64,
+        libc::SYS_pipe2 => pipe2_detour(param1 as _, param2 as _) as i64,
 
         _ if crate::setup().fs_config().is_active() => {
             match syscall {

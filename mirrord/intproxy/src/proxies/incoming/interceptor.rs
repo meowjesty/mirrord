@@ -20,6 +20,7 @@ use tokio::{
     net::{TcpSocket, TcpStream},
     time,
 };
+use tracing::Level;
 
 use super::http::HttpSender;
 use crate::background_tasks::{BackgroundTask, MessageBus};
@@ -211,6 +212,7 @@ impl HttpConnection {
     ///
     /// See [`HttpResponseFallback::response_from_request`] for notes on picking the correct
     /// [`HttpResponseFallback`] variant.
+    #[tracing::instrument(level = Level::DEBUG, skip(self, response), err)]
     async fn handle_response(
         &self,
         request: HttpRequestFallback,

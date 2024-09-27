@@ -23,7 +23,7 @@ use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Receiver;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::error;
+use tracing::{error, Level};
 
 use crate::{body_chunks::BodyExt as _, ConnectionId, Port, RemoteResult, RequestId};
 
@@ -698,6 +698,7 @@ impl HttpResponse<InternalHttpBody> {
     /// and we also need some extra parameters.
     ///
     /// So this is our alternative implementation to `From<Response<Incoming>>`.
+    #[tracing::instrument(level = Level::DEBUG, skip(response), err)]
     pub async fn from_hyper_response(
         response: Response<Incoming>,
         port: Port,

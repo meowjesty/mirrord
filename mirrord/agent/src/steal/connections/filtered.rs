@@ -1,5 +1,10 @@
 use std::{
-    collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, pin::Pin, sync::Arc,
+    collections::HashMap,
+    future::{self, Future},
+    marker::PhantomData,
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
 };
 
 use bytes::Bytes;
@@ -113,7 +118,7 @@ impl FilteringService {
     ///
     /// # TODO
     ///
-    /// This method always creates a new TCP connection and preforms an HTTP handshake.
+    /// This method always creates a new TCP connection and performs an HTTP handshake.
     /// Also, it does not retry the request upon failure.
     async fn send_request(
         to: SocketAddr,
@@ -147,6 +152,9 @@ impl FilteringService {
                 if request.uri().authority().is_none() {
                     *request.version_mut() = hyper::http::Version::HTTP_11;
                 }
+
+                // TODO(alex) [high]: Is the magic fix needed once again?
+                future::poll_fn(|cx| request_sender.poll_ready(cx)).await?;
 
                 request_sender
                     .send_request(request)

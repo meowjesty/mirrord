@@ -793,12 +793,13 @@ pub async fn main() -> Result<()> {
             .with(tracing_subscriber::EnvFilter::from_default_env())
             .init();
     } else {
+        std::env::set_var("RUST_LOG", "mirrord=trace,hyper=debug,info");
         tracing_subscriber::registry()
             .with(
                 tracing_subscriber::fmt::layer()
-                    .with_thread_ids(true)
+                    .with_thread_ids(false)
                     .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-                    .compact(),
+                    .pretty(),
             )
             .with(tracing_subscriber::EnvFilter::from_default_env())
             .init();

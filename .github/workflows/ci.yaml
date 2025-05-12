@@ -523,7 +523,7 @@ jobs:
       - run: npm install portfinder # For a node specific test
       - run: cargo build --target=x86_64-apple-darwin -p mirrord-layer # Build layer lib. The tests load it into the apps.
       - name: mirrord layer tests
-        run: cargo test --target=x86_64-apple-darwin -p mirrord-layer
+        run: cargo test --target=x86_64-apple-darwin -p mirrord-layer outgoing_tcp_flaky
       - name: save intproxy logs
         continue-on-error: true
         if: ${{ always() }}

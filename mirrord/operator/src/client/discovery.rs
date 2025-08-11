@@ -12,8 +12,10 @@ pub async fn operator_installed(client: &Client) -> kube::Result<bool> {
 
     match discovery::oneshot::pinned_kind(client, &gvk)
         .await
-        .inspect_err(|fail| tracing::error!(?fail, "Kaboom"))
-    {
+        .inspect_err(|fail| {
+            tracing::error!(?fail, "Kaboom");
+            println!("{fail:?}");
+        }) {
         Ok(..) => Ok(true),
         Err(kube::Error::Api(response)) if response.code == 404 => Ok(false),
         Err(error) => Err(error),

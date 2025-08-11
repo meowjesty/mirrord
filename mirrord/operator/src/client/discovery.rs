@@ -2,7 +2,7 @@ use kube::{Client, Resource, api::GroupVersionKind, discovery};
 
 use crate::crd::MirrordOperatorCrd;
 
-#[tracing::instrument(level = "trace", skip_all, ret, err)]
+#[tracing::instrument(level = "info", skip_all, ret, err)]
 pub async fn operator_installed(client: &Client) -> kube::Result<bool> {
     let gvk = GroupVersionKind {
         group: MirrordOperatorCrd::group(&()).into_owned(),
@@ -10,7 +10,10 @@ pub async fn operator_installed(client: &Client) -> kube::Result<bool> {
         kind: MirrordOperatorCrd::kind(&()).into_owned(),
     };
 
-    match discovery::oneshot::pinned_kind(client, &gvk).await {
+    match discovery::oneshot::pinned_kind(client, &gvk)
+        .await
+        .inspect_err(|fail| tracing::error!(?fail, "Kaboom"))
+    {
         Ok(..) => Ok(true),
         Err(kube::Error::Api(response)) if response.code == 404 => Ok(false),
         Err(error) => Err(error),

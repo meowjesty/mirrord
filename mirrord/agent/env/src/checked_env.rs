@@ -2,6 +2,7 @@
 use std::os::unix::ffi::OsStrExt;
 use std::{
     any,
+    collections::BTreeMap,
     convert::Infallible,
     fmt,
     marker::PhantomData,
@@ -9,7 +10,7 @@ use std::{
     str::{FromStr, Utf8Error},
 };
 
-use base64::{Engine, engine::general_purpose};
+use base64::{Engine, engine::general_purpose, prelude::BASE64_URL_SAFE};
 #[cfg(feature = "k8s-openapi")]
 use k8s_openapi::api::core::v1::EnvVar;
 use thiserror::Error;
@@ -203,6 +204,27 @@ impl EnvValue for Vec<IpAddr> {
             .map(|item| item.parse::<IpAddr>())
             .collect::<Result<Vec<_>, _>>()
             .map_err(ParseEnvError::ParseError)
+    }
+}
+
+impl EnvValue for BTreeMap<String, u16> {
+    type IntoReprError = Infallible;
+    type FromReprError = ParseEnvError<AddrParseError>;
+
+    fn as_repr(&self) -> Result<String, Self::IntoReprError> {
+        Ok(bincode::encode_to_vec(self, bincode::config::standard())
+            .map(|bytes| BASE64_URL_SAFE.encode(bytes))
+            .unwrap())
+    }
+
+    fn from_repr(repr: &[u8]) -> Result<Self, Self::FromReprError> {
+        let (decoded, _) = bincode::decode_from_slice(
+            &BASE64_URL_SAFE.decode(repr).unwrap(),
+            bincode::config::standard(),
+        )
+        .unwrap();
+
+        Ok(decoded)
     }
 }
 

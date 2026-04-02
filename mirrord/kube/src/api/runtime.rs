@@ -11,7 +11,7 @@ use std::{
 
 use k8s_openapi::{
     NamespaceResourceScope,
-    api::core::v1::{Container, ContainerPort, Node, Pod, Probe},
+    api::core::v1::{Container, ContainerPort, ContainerStatus, Node, Pod, Probe},
     apimachinery::pkg::util::intstr::IntOrString,
 };
 use kube::{Api, Client, Resource, api::ListParams};
@@ -23,7 +23,7 @@ use tracing::Level;
 
 use crate::{
     api::{
-        container::{check_mesh_vendor, choose_container},
+        container::{MultiContainers, check_mesh_vendor, choose_container},
         kubernetes::get_k8s_resource_api,
     },
     error::{KubeApiError, Result},
@@ -99,6 +99,8 @@ pub struct RuntimeData {
     /// Ports where HTTP/gRPC probes are configured
     /// in the target pod.
     pub containers_probe_ports: Vec<u16>,
+
+    pub multi_containers: MultiContainers,
 }
 
 impl RuntimeData {
@@ -223,6 +225,24 @@ impl RuntimeData {
 
         let mesh = check_mesh_vendor(pod);
 
+        // TODO(alex) [high] 2026-04-02 1: I don't think we want the btree here, can we assign the
+        // agent ports in here (using `enumerate`)? If so, then we can build it in here, otherwise
+        // we just want the list of containers (name and id).
+        let multi_containers = container_statuses
+            .iter()
+            .filter_map(
+                |ContainerStatus {
+                     name,
+                     container_id,
+                     ready,
+                     ..
+                 }| {
+                    let container_id = container_id.clone()?;
+                    ready.then(|| (name.clone(), container_id))
+                },
+            )
+            .collect::<BTreeMap<_, _>>();
+
         Ok(RuntimeData {
             pod_ips,
             pod_name: pod_name.to_owned(),
@@ -240,6 +260,7 @@ impl RuntimeData {
                 .and_then(|spec| spec.share_process_namespace)
                 .unwrap_or_default(),
             containers_probe_ports,
+            multi_containers: todo!(),
         })
     }
 

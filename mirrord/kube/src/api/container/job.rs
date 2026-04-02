@@ -207,6 +207,7 @@ where
         pod_name: pod_name.to_owned(),
         pod_namespace: pod_namespace.to_owned(),
         agent_port: params.port,
+        containers_port: params.containers_port.clone(),
     })
 }
 
@@ -380,6 +381,7 @@ mod test {
             support_ipv6,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
+            containers_port: Default::default(),
         };
 
         let update = JobVariant::new(&agent, &params).as_update();
@@ -473,6 +475,7 @@ mod test {
             support_ipv6,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
+            containers_port: Default::default(),
         };
 
         let update = JobTargetedVariant::new(
@@ -491,6 +494,7 @@ mod test {
                 guessed_container: false,
                 share_process_namespace: false,
                 containers_probe_ports: vec![],
+                multi_containers: todo!(),
             },
         )
         .as_update();

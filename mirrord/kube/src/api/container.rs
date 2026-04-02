@@ -1,10 +1,16 @@
-use std::{collections::HashSet, net::IpAddr, sync::LazyLock, time::Duration};
+use std::{
+    collections::{BTreeMap, HashSet},
+    net::IpAddr,
+    sync::LazyLock,
+    time::Duration,
+};
 
 use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
 use mirrord_agent_env::{mesh::MeshVendor, steal_tls::StealPortTlsConfig};
 use mirrord_config::agent::AgentConfig;
 use mirrord_progress::Progress;
 use rand::distr::{Alphanumeric, SampleString};
+use serde::{Deserialize, Serialize};
 
 use crate::{api::kubernetes::AgentKubernetesConnectInfo, error::Result};
 
@@ -47,7 +53,14 @@ pub struct ContainerConfig {
     pub steal_tls_config: Vec<StealPortTlsConfig>,
     /// How long the agent should keep running after all client connections have been closed.
     pub idle_ttl: Duration,
+
+    pub containers_port: MultiContainers,
 }
+
+// TODO(alex) [high] 1: Started using this, in mirrord already compiles, but have to see how this
+// gets inserted into the agent proper.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Hash, PartialEq, Eq)]
+pub struct MultiContainers(pub BTreeMap<String, u16>);
 
 #[derive(Clone, Debug)]
 pub struct ContainerParams {
@@ -68,6 +81,8 @@ pub struct ContainerParams {
     pub steal_tls_config: Vec<StealPortTlsConfig>,
     /// How long the agent should keep running after all client connections have been closed.
     pub idle_ttl: Duration,
+
+    pub containers_port: MultiContainers,
 }
 
 impl From<ContainerConfig> for ContainerParams {
@@ -93,6 +108,7 @@ impl From<ContainerConfig> for ContainerParams {
             support_ipv6: value.support_ipv6,
             steal_tls_config: value.steal_tls_config,
             idle_ttl: value.idle_ttl,
+            containers_port: value.containers_port,
         }
     }
 }

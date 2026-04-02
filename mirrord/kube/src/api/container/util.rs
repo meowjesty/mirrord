@@ -38,19 +38,38 @@ pub(super) fn get_capabilities(agent: &AgentConfig) -> Vec<LinuxCapability> {
         .collect()
 }
 
+// TODO(alex) [high] 1: Could we pass the vars here for multi-container? I think so, just need to
+// use it now that we have it here as `containers_port`.
 /// Builds mirrord agent environment variables.
-pub(super) fn agent_env(agent: &AgentConfig, params: &ContainerParams) -> Vec<EnvVar> {
+pub(super) fn agent_env(
+    agent: &AgentConfig,
+    ContainerParams {
+        name: _,
+        gid: _,
+        port: _,
+        tls_cert,
+        pod_ips,
+        support_ipv6,
+        steal_tls_config,
+        idle_ttl,
+        containers_port,
+    }: &ContainerParams,
+) -> Vec<EnvVar> {
     let mut env = vec![
         envs::LOG_LEVEL.as_k8s_spec(&agent.log_level),
         envs::STEALER_FLUSH_CONNECTIONS.as_k8s_spec(&agent.flush_connections),
         envs::JSON_LOG.as_k8s_spec(&agent.json_log),
-        envs::IPV6_SUPPORT.as_k8s_spec(&params.support_ipv6),
+        envs::IPV6_SUPPORT.as_k8s_spec(&support_ipv6),
         // TODO remove after some time.
         // Left for compatibility with older agents.
         envs::PASSTHROUGH_MIRRORING.as_k8s_spec(&true),
         envs::MAX_BODY_BUFFER_SIZE.as_k8s_spec(&agent.max_body_buffer_size),
         envs::MAX_BODY_BUFFER_TIMEOUT.as_k8s_spec(&agent.max_body_buffer_timeout),
         envs::JAQ_TIME_LIMIT.as_k8s_spec(&agent.jaq_time_limit),
+        // TODO(alex) [high] 2026-04-01 2: The env var is in here, is the agent receiving it then?
+        // The operator probably doesn't compile, thanks to missing `containers_port`, so fixing
+        // that should mean that we pass the env var to the agent?
+        envs::CONTAINERS_PORT.as_k8s_spec(&containers_port.0),
     ];
 
     if let Some(nftables) = agent.nftables {
@@ -65,7 +84,7 @@ pub(super) fn agent_env(agent: &AgentConfig, params: &ContainerParams) -> Vec<En
         env.push(envs::DNS_TIMEOUT.as_k8s_spec(&timeout));
     };
 
-    if let Some(pod_ips) = &params.pod_ips {
+    if let Some(pod_ips) = &pod_ips {
         env.push(envs::POD_IPS.as_k8s_spec(pod_ips));
     }
 
@@ -73,16 +92,16 @@ pub(super) fn agent_env(agent: &AgentConfig, params: &ContainerParams) -> Vec<En
         env.push(envs::METRICS.as_k8s_spec(metrics_address));
     }
 
-    if let Some(cert) = &params.tls_cert {
+    if let Some(cert) = &tls_cert {
         env.push(envs::OPERATOR_CERT.as_k8s_spec(cert));
     }
 
-    if params.steal_tls_config.is_empty().not() {
-        env.push(envs::STEAL_TLS_CONFIG.as_k8s_spec(&params.steal_tls_config));
+    if steal_tls_config.is_empty().not() {
+        env.push(envs::STEAL_TLS_CONFIG.as_k8s_spec(&steal_tls_config));
     }
 
-    if params.idle_ttl.is_zero().not() {
-        env.push(envs::IDDLE_TTL.as_k8s_spec(&params.idle_ttl.as_secs()))
+    if idle_ttl.is_zero().not() {
+        env.push(envs::IDDLE_TTL.as_k8s_spec(&idle_ttl.as_secs()))
     }
 
     if agent.inject_headers {

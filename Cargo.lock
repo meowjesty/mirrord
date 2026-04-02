@@ -4787,6 +4787,7 @@ name = "mirrord-agent-env"
 version = "3.197.1"
 dependencies = [
  "base64",
+ "bincode",
  "k8s-openapi",
  "schemars 1.2.1",
  "serde",

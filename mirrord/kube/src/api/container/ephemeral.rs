@@ -161,6 +161,7 @@ where
         pod_name: runtime_data.pod_name.to_string(),
         pod_namespace: runtime_data.pod_namespace.clone(),
         agent_port: params.port,
+        containers_port: params.containers_port.clone(),
     })
 }
 

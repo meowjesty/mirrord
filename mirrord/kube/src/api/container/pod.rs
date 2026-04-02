@@ -309,6 +309,7 @@ mod test {
             support_ipv6: false,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
+            containers_port: Default::default(),
         };
 
         let update = PodVariant::new(&agent, &params).as_update();
@@ -333,6 +334,7 @@ mod test {
                 guessed_container: false,
                 share_process_namespace: false,
                 containers_probe_ports: vec![],
+                multi_containers: todo!(),
             },
         )
         .as_update();
@@ -357,6 +359,7 @@ mod test {
             support_ipv6: false,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
+            containers_port: Default::default(),
         };
 
         let update = PodTargetedVariant::new(
@@ -375,6 +378,7 @@ mod test {
                 guessed_container: false,
                 share_process_namespace: false,
                 containers_probe_ports: vec![],
+                multi_containers: todo!(),
             },
         )
         .as_update();

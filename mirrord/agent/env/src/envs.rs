@@ -2,7 +2,10 @@
 //!
 //! If you want to add some more, please do it here.
 
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    collections::BTreeMap,
+    net::{IpAddr, SocketAddr},
+};
 
 use crate::{checked_env::CheckedEnv, steal_tls::StealPortTlsConfig};
 
@@ -97,3 +100,6 @@ pub const CLEAN_IPTABLES_ON_START: CheckedEnv<bool> =
 
 /// Jaq process time limit (ms)
 pub const JAQ_TIME_LIMIT: CheckedEnv<u64> = CheckedEnv::new("MIRRORD_JAQ_TIME_LIMIT");
+
+pub const CONTAINERS_PORT: CheckedEnv<BTreeMap<String, u16>> =
+    CheckedEnv::new("MIRRORD_AGENT_CONTAINERS_PORT");

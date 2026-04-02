@@ -297,6 +297,8 @@ use nix::errno::Errno;
 use operator::operator_command;
 use port_forward::{PortForwardError, PortForwarder, ReversePortForwarder};
 use regex::Regex;
+#[cfg(all(unix, debug_assertions))]
+use rust_embed as _;
 use semver::Version;
 use tracing::{error, info, trace, warn};
 use which::which;
@@ -335,6 +337,9 @@ mod wsl;
 
 #[cfg(feature = "wizard")]
 mod wizard;
+
+#[cfg(unix)]
+mod ui;
 
 mod fix;
 
@@ -937,7 +942,9 @@ async fn port_forward(
     let _ = tokio::try_join!(
         async {
             if !args.port_mapping.is_empty() {
-                let mut port_forward = PortForwarder::new(connection, port_mappings).await?;
+                let (agent_tx, agent_rx) = connection.destructure();
+                let mut port_forward =
+                    PortForwarder::new(agent_tx, agent_rx, port_mappings, None).await?;
                 port_forward.run().await.map_err(|error| error.into())
             } else {
                 Ok::<(), CliError>(())
@@ -1130,6 +1137,8 @@ fn main() -> miette::Result<()> {
                 .await?
             }
             Commands::Fix(args) => fix::fix_command(args).await?,
+            #[cfg(unix)]
+            Commands::Ui(args) => ui::ui_command(args).await?,
         };
 
         Ok(())

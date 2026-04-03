@@ -101,5 +101,5 @@ pub const CLEAN_IPTABLES_ON_START: CheckedEnv<bool> =
 /// Jaq process time limit (ms)
 pub const JAQ_TIME_LIMIT: CheckedEnv<u64> = CheckedEnv::new("MIRRORD_JAQ_TIME_LIMIT");
 
-pub const CONTAINERS_PORT: CheckedEnv<BTreeMap<String, u16>> =
-    CheckedEnv::new("MIRRORD_AGENT_CONTAINERS_PORT");
+pub const MULTI_CONTAINERS: CheckedEnv<BTreeMap<String, u16>> =
+    CheckedEnv::new("MIRRORD_AGENT_MULTI_CONTAINERS");

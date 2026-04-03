@@ -53,8 +53,6 @@ pub struct ContainerConfig {
     pub steal_tls_config: Vec<StealPortTlsConfig>,
     /// How long the agent should keep running after all client connections have been closed.
     pub idle_ttl: Duration,
-
-    pub containers_port: MultiContainers,
 }
 
 // TODO(alex) [high] 1: Started using this, in mirrord already compiles, but have to see how this
@@ -82,7 +80,7 @@ pub struct ContainerParams {
     /// How long the agent should keep running after all client connections have been closed.
     pub idle_ttl: Duration,
 
-    pub containers_port: MultiContainers,
+    pub multi_containers: MultiContainers,
 }
 
 impl From<ContainerConfig> for ContainerParams {
@@ -108,7 +106,7 @@ impl From<ContainerConfig> for ContainerParams {
             support_ipv6: value.support_ipv6,
             steal_tls_config: value.steal_tls_config,
             idle_ttl: value.idle_ttl,
-            containers_port: value.containers_port,
+            multi_containers: Default::default(),
         }
     }
 }

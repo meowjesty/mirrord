@@ -236,11 +236,10 @@ impl RuntimeData {
                      container_id,
                      ready,
                      ..
-                 }| {
-                    let container_id = container_id.clone()?;
-                    ready.then(|| (name.clone(), container_id))
-                },
+                 }| { ready.then(|| name.clone()) },
             )
+            .enumerate()
+            .map(|(index, container_name)| (container_name, index as u16 + 24000))
             .collect::<BTreeMap<_, _>>();
 
         Ok(RuntimeData {
@@ -260,7 +259,7 @@ impl RuntimeData {
                 .and_then(|spec| spec.share_process_namespace)
                 .unwrap_or_default(),
             containers_probe_ports,
-            multi_containers: todo!(),
+            multi_containers: MultiContainers(multi_containers),
         })
     }
 

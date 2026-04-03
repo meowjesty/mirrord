@@ -10,6 +10,7 @@ use k8s_openapi::{
 use kube::api::ObjectMeta;
 use mirrord_agent_env::{envs, mesh::MeshVendor};
 use mirrord_config::agent::AgentConfig;
+use tracing::Level;
 
 use super::util::agent_env;
 use crate::api::{
@@ -60,12 +61,14 @@ impl ContainerVariant for PodVariant<'_> {
         self.params
     }
 
+    // TODO(alex) [high] 2026-04-02 2: I think this is the one we're calling to create the targeted
+    // agent pod.
+    #[tracing::instrument(level = Level::DEBUG, skip(self), ret)]
     fn as_update(&self) -> Pod {
         let PodVariant {
             agent,
             command_line,
             params,
-            ..
         } = self;
 
         let resources = agent.resources.clone().unwrap_or_else(|| {
@@ -84,7 +87,12 @@ impl ContainerVariant for PodVariant<'_> {
             .expect("Should be valid ResourceRequirements json")
         });
 
+        // TODO(alex) [high] 2026-04-02 2: It should be in the `MULTI_CONTAINERS` env var now,
+        // unless this is not the right `as_update`. Now get a deployment pod with 2 containers so I
+        // can test it, but we still need to make changes to the operator, so it can match the
+        // target and connections to the right ports when connecting to the agent.
         let env = agent_env(agent, params);
+
         let image_pull_secrets = agent.image_pull_secrets.as_ref().map(|secrets| {
             secrets
                 .iter()
@@ -187,6 +195,7 @@ impl ContainerVariant for PodTargetedVariant<'_> {
         self.inner.params()
     }
 
+    #[tracing::instrument(level = Level::DEBUG, skip(self), ret)]
     fn as_update(&self) -> Pod {
         let PodTargetedVariant { runtime_data, .. } = self;
 
@@ -309,7 +318,7 @@ mod test {
             support_ipv6: false,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
-            containers_port: Default::default(),
+            multi_containers: todo!(),
         };
 
         let update = PodVariant::new(&agent, &params).as_update();
@@ -359,7 +368,7 @@ mod test {
             support_ipv6: false,
             steal_tls_config: Default::default(),
             idle_ttl: Default::default(),
-            containers_port: Default::default(),
+            multi_containers: todo!(),
         };
 
         let update = PodTargetedVariant::new(

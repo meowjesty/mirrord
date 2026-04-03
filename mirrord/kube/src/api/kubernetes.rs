@@ -332,8 +332,6 @@ pub struct AgentKubernetesConnectInfo {
     pub pod_namespace: String,
     /// Port on which the agent accepts connections.
     pub agent_port: u16,
-
-    pub containers_port: MultiContainers,
 }
 
 #[tracing::instrument(level = Level::TRACE, skip(kubeconfig), ret, err)]

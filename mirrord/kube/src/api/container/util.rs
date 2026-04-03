@@ -52,7 +52,7 @@ pub(super) fn agent_env(
         support_ipv6,
         steal_tls_config,
         idle_ttl,
-        containers_port,
+        multi_containers,
     }: &ContainerParams,
 ) -> Vec<EnvVar> {
     let mut env = vec![
@@ -69,7 +69,7 @@ pub(super) fn agent_env(
         // TODO(alex) [high] 2026-04-01 2: The env var is in here, is the agent receiving it then?
         // The operator probably doesn't compile, thanks to missing `containers_port`, so fixing
         // that should mean that we pass the env var to the agent?
-        envs::CONTAINERS_PORT.as_k8s_spec(&containers_port.0),
+        envs::MULTI_CONTAINERS.as_k8s_spec(&multi_containers.0),
     ];
 
     if let Some(nftables) = agent.nftables {

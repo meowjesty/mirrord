@@ -8,6 +8,7 @@ use std::{
         Arc,
         atomic::{AtomicU32, Ordering},
     },
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use async_pidfd::AsyncPidFd;
@@ -35,7 +36,7 @@ use tracing::{Level, debug, error, trace, warn};
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
 use crate::{
-    cli::{self, Args},
+    cli::{self, AgentArgs, Args},
     client_connection::{self, ClientConnection},
     container_handle::ContainerHandle,
     dns::{self, DnsApi},
@@ -98,7 +99,7 @@ struct State {
 
 impl State {
     /// Return [`Err`] if container runtime operations failed.
-    #[tracing::instrument(level = Level::TRACE, err)]
+    #[tracing::instrument(level = Level::DEBUG, err)]
     pub async fn new(args: &Args) -> AgentResult<State> {
         let tls_connector = args
             .operator_tls_cert_pem
@@ -726,7 +727,7 @@ async fn check_existing_rules(
 /// Obtains the PID of the target container (if there is any),
 /// starts background tasks and listens for client connections.
 #[tracing::instrument(level = Level::TRACE, ret, err)]
-async fn start_agent(args: Args) -> AgentResult<()> {
+async fn start_agent(AgentArgs { args, multi_containers }: AgentArgs) -> AgentResult<()> {
     // Prepares a TCP listener for accepting client connections.
     let setup_listener = |ipv6: bool| -> AgentResult<TcpListener> {
         let (socket, ip) = if ipv6 {
@@ -1008,9 +1009,11 @@ async fn run_child_agent() -> AgentResult<()> {
 ///
 /// Captures SIGTERM signals sent by Kubernetes when the pod is being gracefully deleted.
 /// When a signal is captured, the child process is killed and the iptables are cleaned.
-async fn start_iptable_guard(args: Args) -> AgentResult<()> {
+async fn start_iptable_guard(args: AgentArgs) -> AgentResult<()> {
     debug!("start_iptable_guard -> Initializing iptable-guard.");
 
+    // TODO(alex) [high] 2026-04-07 4: Now we just need to update this stuff so it deals
+    // with multi-containers.
     let state = State::new(&args).await?;
     let with_mesh_exclusion = state.is_with_mesh_exclusion();
 
@@ -1103,17 +1106,30 @@ pub async fn main() -> AgentResult<()> {
             .init();
     }
 
+    let debug_timer = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
     debug!(
-        "main -> Initializing mirrord-agent, version {}.",
-        env!("CARGO_PKG_VERSION")
+        "main -> Initializing mirrord-agent, version {} {debug_timer}.",
+        env!("CARGO_PKG_VERSION"),
     );
 
     let args = cli::parse_args();
     let second_process = std::env::var(CHILD_PROCESS_ENV).is_ok();
 
-    if args.mode.is_targetless() || second_process {
-        start_agent(args).await
+    // TODO(alex) [high] 2026-04-07 4: Env var is here.
+    debug!("Args: {args:?}");
+    debug!("env vars: {:?}", std::env::vars());
+    let multi_containers = envs::MULTI_CONTAINERS.from_env_or_default();
+    debug!("multi containers: {multi_containers:?}");
+
+    let agent_args = AgentArgs { args, multi_containers }
+
+    if agent_args.args.mode.is_targetless() || second_process {
+        start_agent(agent_args).await
     } else {
-        start_iptable_guard(args).await
+        start_iptable_guard(agent_args).await
     }
 }

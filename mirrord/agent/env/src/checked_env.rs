@@ -2,7 +2,7 @@
 use std::os::unix::ffi::OsStrExt;
 use std::{
     any,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::Infallible,
     fmt,
     marker::PhantomData,
@@ -15,7 +15,7 @@ use base64::{Engine, engine::general_purpose, prelude::BASE64_URL_SAFE};
 use k8s_openapi::api::core::v1::EnvVar;
 use thiserror::Error;
 
-use crate::steal_tls::StealPortTlsConfig;
+use crate::{multi_container::MultiContainerThingy, steal_tls::StealPortTlsConfig};
 
 /// Type of an environment variable value.
 pub trait EnvValue: Sized {
@@ -207,7 +207,7 @@ impl EnvValue for Vec<IpAddr> {
     }
 }
 
-impl EnvValue for BTreeMap<String, u16> {
+impl EnvValue for BTreeSet<MultiContainerThingy> {
     type IntoReprError = Infallible;
     type FromReprError = ParseEnvError<AddrParseError>;
 

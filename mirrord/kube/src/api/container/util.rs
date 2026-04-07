@@ -6,7 +6,7 @@ use kube::{Api, api::LogParams};
 use mirrord_agent_env::envs;
 use mirrord_config::agent::{AgentConfig, LinuxCapability};
 use regex::Regex;
-use tracing::warn;
+use tracing::{Level, warn};
 
 use crate::{api::container::ContainerParams, error::Result};
 
@@ -38,9 +38,11 @@ pub(super) fn get_capabilities(agent: &AgentConfig) -> Vec<LinuxCapability> {
         .collect()
 }
 
-// TODO(alex) [high] 1: Could we pass the vars here for multi-container? I think so, just need to
-// use it now that we have it here as `containers_port`.
+// TODO(alex) [high] 2026-04-03 w: The env vars are in the agent, `MULTI_CONTAINERS`, still don't
+// know from which `as_update` they're coming from. Now we need to parse them into something usable,
+// so we can do the multi-container ports iptables.
 /// Builds mirrord agent environment variables.
+#[tracing::instrument(level = Level::DEBUG, ret)]
 pub(super) fn agent_env(
     agent: &AgentConfig,
     ContainerParams {

@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::Infallible,
     fmt::{self, Display, Formatter},
     future::Future,
@@ -15,7 +15,7 @@ use k8s_openapi::{
     apimachinery::pkg::util::intstr::IntOrString,
 };
 use kube::{Api, Client, Resource, api::ListParams};
-use mirrord_agent_env::mesh::MeshVendor;
+use mirrord_agent_env::{mesh::MeshVendor, multi_container::MultiContainerThingy};
 use mirrord_config::target::Target;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -236,11 +236,17 @@ impl RuntimeData {
                      container_id,
                      ready,
                      ..
-                 }| { ready.then(|| name.clone()) },
+                 }| {
+                    ready.then(|| (name.clone(), container_id.clone().unwrap()))
+                },
             )
             .enumerate()
-            .map(|(index, container_name)| (container_name, index as u16 + 24000))
-            .collect::<BTreeMap<_, _>>();
+            .map(|(index, (name, id))| MultiContainerThingy {
+                name,
+                id,
+                port: index as u16 + 24000,
+            })
+            .collect::<BTreeSet<_>>();
 
         Ok(RuntimeData {
             pod_ips,

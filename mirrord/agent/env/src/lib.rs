@@ -17,4 +17,5 @@
 pub mod checked_env;
 pub mod envs;
 pub mod mesh;
+pub mod multi_container;
 pub mod steal_tls;

@@ -1,12 +1,14 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     net::IpAddr,
     sync::LazyLock,
     time::Duration,
 };
 
 use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
-use mirrord_agent_env::{mesh::MeshVendor, steal_tls::StealPortTlsConfig};
+use mirrord_agent_env::{
+    mesh::MeshVendor, multi_container::MultiContainerThingy, steal_tls::StealPortTlsConfig,
+};
 use mirrord_config::agent::AgentConfig;
 use mirrord_progress::Progress;
 use rand::distr::{Alphanumeric, SampleString};
@@ -58,7 +60,7 @@ pub struct ContainerConfig {
 // TODO(alex) [high] 1: Started using this, in mirrord already compiles, but have to see how this
 // gets inserted into the agent proper.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub struct MultiContainers(pub BTreeMap<String, u16>);
+pub struct MultiContainers(pub BTreeSet<MultiContainerThingy>);
 
 #[derive(Clone, Debug)]
 pub struct ContainerParams {

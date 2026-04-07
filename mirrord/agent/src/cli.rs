@@ -1,9 +1,9 @@
 #![deny(missing_docs)]
 
-use std::net::SocketAddr;
+use std::{collections::BTreeSet, net::SocketAddr};
 
 use clap::{Parser, Subcommand};
-use mirrord_agent_env::envs;
+use mirrord_agent_env::{envs, multi_container::MultiContainerThingy};
 
 const DEFAULT_RUNTIME: &str = "containerd";
 
@@ -99,4 +99,10 @@ impl Mode {
 
 pub fn parse_args() -> Args {
     Args::try_parse().unwrap_or_else(|err| err.exit())
+}
+
+#[derive(Debug)]
+pub(crate) struct AgentArgs {
+    pub(crate) args: Args,
+    pub(crate) multi_containers: BTreeSet<MultiContainerThingy>,
 }

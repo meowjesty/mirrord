@@ -3,11 +3,13 @@
 //! If you want to add some more, please do it here.
 
 use std::{
-    collections::BTreeMap,
+    collections::BTreeSet,
     net::{IpAddr, SocketAddr},
 };
 
-use crate::{checked_env::CheckedEnv, steal_tls::StealPortTlsConfig};
+use crate::{
+    checked_env::CheckedEnv, multi_container::MultiContainerThingy, steal_tls::StealPortTlsConfig,
+};
 
 /// Used to pass operator's x509 certificate to the agent.
 ///
@@ -101,5 +103,5 @@ pub const CLEAN_IPTABLES_ON_START: CheckedEnv<bool> =
 /// Jaq process time limit (ms)
 pub const JAQ_TIME_LIMIT: CheckedEnv<u64> = CheckedEnv::new("MIRRORD_JAQ_TIME_LIMIT");
 
-pub const MULTI_CONTAINERS: CheckedEnv<BTreeMap<String, u16>> =
+pub const MULTI_CONTAINERS: CheckedEnv<BTreeSet<MultiContainerThingy>> =
     CheckedEnv::new("MIRRORD_AGENT_MULTI_CONTAINERS");

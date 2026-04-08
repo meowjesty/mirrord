@@ -225,10 +225,12 @@ impl RuntimeData {
 
         let mesh = check_mesh_vendor(pod);
 
+        let mut port = 24000;
+
         // TODO(alex) [high] 2026-04-02 1: I don't think we want the btree here, can we assign the
         // agent ports in here (using `enumerate`)? If so, then we can build it in here, otherwise
         // we just want the list of containers (name and id).
-        let multi_containers = container_statuses
+        let mut multi_containers = container_statuses
             .iter()
             .filter_map(
                 |ContainerStatus {
@@ -241,12 +243,41 @@ impl RuntimeData {
                 },
             )
             .enumerate()
-            .map(|(index, (name, id))| MultiContainerThingy {
-                name,
-                id,
-                port: index as u16 + 24000,
+            .map(|(index, (name, id))| {
+                port += index as u16;
+
+                MultiContainerThingy::new(name, id, false, port)
             })
             .collect::<BTreeSet<_>>();
+
+        let ephemeral_container_statuses = pod
+            .status
+            .as_ref()
+            .and_then(|status| status.ephemeral_container_statuses.as_ref());
+
+        if let Some(ephemeral_container_statuses) = ephemeral_container_statuses {
+            let ephemeral_multi_containers = ephemeral_container_statuses
+                .iter()
+                .filter_map(
+                    |ContainerStatus {
+                         name,
+                         container_id,
+                         ready,
+                         ..
+                     }| {
+                        ready.then(|| (name.clone(), container_id.clone().unwrap()))
+                    },
+                )
+                .enumerate()
+                .map(|(index, (name, id))| {
+                    port += index as u16;
+
+                    MultiContainerThingy::new(name, id, true, port)
+                })
+                .collect::<BTreeSet<_>>();
+
+            multi_containers.extend(ephemeral_multi_containers);
+        }
 
         Ok(RuntimeData {
             pod_ips,

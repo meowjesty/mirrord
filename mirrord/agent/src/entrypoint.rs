@@ -14,9 +14,9 @@ use std::{
 use async_pidfd::AsyncPidFd;
 use client_connection::AgentTlsConnector;
 use dns::{ClientGetAddrInfoRequest, DnsCommand};
-use futures::{TryFutureExt, future::OptionFuture};
+use futures::{StreamExt, TryFutureExt, TryStreamExt, future::OptionFuture, stream};
 use metrics::{CLIENT_COUNT, start_metrics};
-use mirrord_agent_env::envs;
+use mirrord_agent_env::{envs, multi_container::MultiContainerThingy};
 use mirrord_agent_iptables::{
     IPTablesWrapper, SafeIpTables,
     error::{IPTablesError, IPTablesResult},
@@ -36,9 +36,9 @@ use tracing::{Level, debug, error, trace, warn};
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
 use crate::{
-    cli::{self, AgentArgs, Args},
+    cli::{self, Args, CliAndEnvArgs},
     client_connection::{self, ClientConnection},
-    container_handle::ContainerHandle,
+    container_handle::{ContainerHandle, ContainerThingy},
     dns::{self, DnsApi},
     env,
     error::{AgentError, AgentResult},
@@ -67,13 +67,13 @@ pub(crate) const IPTABLES_DIRTY_EXIT_CODE: u8 = 99;
 const CHILD_PROCESS_ENV: &str = "MIRRORD_AGENT_CHILD_PROCESS";
 
 /// Error message to display when dirty IP tables are detected.
-const DIRTY_IPTABLES_ERROR_MESSAGE: &str = "Detected dirty iptables. Either some other mirrord agent is running \
+pub(crate) const DIRTY_IPTABLES_ERROR_MESSAGE: &str = "Detected dirty iptables. Either some other mirrord agent is running \
 or the previous agent failed to clean up before exit. \
 If no other mirrord agent is targeting this pod, please delete the pod. \
 To allow concurrent sessions, consider using the operator available in mirrord for Teams: https://app.metalbear.com/?utm_source=dirtyiptables&utm_medium=agent";
 
 /// Warning when dirty IP tables were detected and cleaned.
-const DIRTY_IPTABLES_CLEANUP_WARNING_MESSAGE: &str = "Detected dirty iptables. Either some other mirrord agent is running \
+pub(crate) const DIRTY_IPTABLES_CLEANUP_WARNING_MESSAGE: &str = "Detected dirty iptables. Either some other mirrord agent is running \
 or the previous agent failed to clean up before exit. \
 The leftover rules were cleaned and the agent is starting. \
 To allow concurrent sessions, consider using the operator available in mirrord for Teams: https://app.metalbear.com/?utm_source=dirtyiptables&utm_medium=agent";
@@ -82,7 +82,7 @@ To allow concurrent sessions, consider using the operator available in mirrord f
 /// Stores common data used when serving client connections.
 /// Can be cheaply cloned and passed to per-client background tasks.
 #[derive(Clone)]
-struct State {
+struct OldState {
     /// [`ClientId`] for the next client that connects to this agent.
     next_client_id: Arc<AtomicU32>,
     /// Handle to the target container if there is one.
@@ -97,10 +97,113 @@ struct State {
     network_runtime: Arc<BgTaskRuntime>,
 }
 
+struct State {
+    /// [`ClientId`] for the next client that connects to this agent.
+    next_client_id: Arc<AtomicU32>,
+
+    /// When present, it is used to secure incoming TCP connections.
+    tls_connector: Option<AgentTlsConnector>,
+
+    multi_containers: HashMap<u16, ContainerThingy>,
+    agent_args: CliAndEnvArgs,
+    cancellation_token: CancellationToken,
+}
+
 impl State {
+    // TODO(alex) [high] 2026-04-08 5: We need multiple listeners now, one for each container port
+    // ...
+    pub(super) async fn check_container_chain_names_for_conflict(&self) -> AgentResult<()> {
+        for (port, container_thingy) in self.multi_containers.iter() {
+            container_thingy
+                .check_container_chain_names_for_conflict(
+                    &self.agent_args,
+                    todo!(),
+                    self.tls_connector.clone(),
+                    self.cancellation_token.clone(),
+                )
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = Level::DEBUG, err)]
+    async fn new_multi_containers(
+        agent_args: &CliAndEnvArgs,
+        cancellation_token: CancellationToken,
+    ) -> AgentResult<State> {
+        let CliAndEnvArgs {
+            multi_containers,
+            args,
+        } = agent_args;
+
+        let tls_connector = args
+            .operator_tls_cert_pem
+            .clone()
+            .map(AgentTlsConnector::new)
+            .transpose()?;
+
+        let multi_containers = stream::iter(multi_containers)
+            .then(|container_thingy| async move {
+                let container = if container_thingy.ephemeral() {
+                    ContainerHandle::new(runtime::Container::Ephemeral(
+                        runtime::EphemeralContainer {
+                            container_id: envs::EPHEMERAL_TARGET_CONTAINER_ID
+                                .try_from_env()
+                                .ok()
+                                .flatten()
+                                .unwrap_or_default(),
+                        },
+                    ))
+                    .await?
+                } else {
+                    let container = get_container(
+                        container_thingy.id().to_string(),
+                        container_thingy.runtime(),
+                    )
+                    .await?;
+
+                    ContainerHandle::new(container).await?
+                };
+
+                Ok::<_, AgentError>((container, container_thingy.port()))
+            })
+            .and_then(|(handle, port)| async move {
+                let network_runtime = BgTaskRuntime::spawn(Some(RuntimeNamespace::new(
+                    handle.pid(),
+                    NamespaceType::Net,
+                )))
+                .await?;
+
+                Ok((
+                    port,
+                    ContainerThingy {
+                        handle,
+                        bg_task_runtime: Arc::new(network_runtime),
+                        env: Default::default(),
+                    },
+                ))
+            })
+            .try_collect::<HashMap<_, _>>()
+            .await?;
+
+        Ok(State {
+            next_client_id: Default::default(),
+            tls_connector,
+            multi_containers,
+            agent_args: agent_args.clone(),
+            cancellation_token,
+        })
+    }
+
     /// Return [`Err`] if container runtime operations failed.
     #[tracing::instrument(level = Level::DEBUG, err)]
-    pub async fn new(args: &Args) -> AgentResult<State> {
+    pub async fn new(
+        CliAndEnvArgs {
+            args,
+            multi_containers,
+        }: &CliAndEnvArgs,
+    ) -> AgentResult<OldState> {
         let tls_connector = args
             .operator_tls_cert_pem
             .clone()
@@ -164,7 +267,7 @@ impl State {
             }
         };
 
-        Ok(State {
+        Ok(OldState {
             next_client_id: Default::default(),
             container,
             env: Arc::new(env),
@@ -640,7 +743,7 @@ pub async fn notify_client_about_dirty_iptables(
 /// container dies, the veth interface will be deleted while
 /// redirected connections are still open, and thus the other ends
 /// will stay open with no way to terminate them correctly.
-fn monitor_main_container(cancel: CancellationToken, pid: libc::pid_t) {
+pub(crate) fn monitor_main_container(cancel: CancellationToken, pid: libc::pid_t) {
     let fd = match AsyncPidFd::from_pid(pid) {
         Ok(fd) => fd,
         Err(error) => {
@@ -696,7 +799,7 @@ async fn get_rules(
 /// If `clean_existing_rules` is set, the iptables will be cleaned after fetching the existing
 /// rules. The rules from before the cleanup will be returned for logging.
 #[tracing::instrument(level = Level::TRACE, ret, err)]
-async fn check_existing_rules(
+pub(crate) async fn check_existing_rules(
     support_ipv6: bool,
     clean_existing_rules: bool,
     with_mesh_exclusion: bool,
@@ -727,7 +830,12 @@ async fn check_existing_rules(
 /// Obtains the PID of the target container (if there is any),
 /// starts background tasks and listens for client connections.
 #[tracing::instrument(level = Level::TRACE, ret, err)]
-async fn start_agent(AgentArgs { args, multi_containers }: AgentArgs) -> AgentResult<()> {
+async fn start_agent(agent_args: CliAndEnvArgs) -> AgentResult<()> {
+    let CliAndEnvArgs {
+        args,
+        multi_containers,
+    } = &agent_args;
+
     // Prepares a TCP listener for accepting client connections.
     let setup_listener = |ipv6: bool| -> AgentResult<TcpListener> {
         let (socket, ip) = if ipv6 {
@@ -755,7 +863,7 @@ async fn start_agent(AgentArgs { args, multi_containers }: AgentArgs) -> AgentRe
     let client_listener_address = listener.local_addr()?;
     debug!(address = %client_listener_address, "Created the client listener.");
 
-    let state = State::new(&args).await?;
+    let state = State::new_multi_containers(&agent_args).await?;
 
     let cancellation_token = CancellationToken::new();
 
@@ -1009,12 +1117,17 @@ async fn run_child_agent() -> AgentResult<()> {
 ///
 /// Captures SIGTERM signals sent by Kubernetes when the pod is being gracefully deleted.
 /// When a signal is captured, the child process is killed and the iptables are cleaned.
-async fn start_iptable_guard(args: AgentArgs) -> AgentResult<()> {
+async fn start_iptable_guard(agent_args: CliAndEnvArgs) -> AgentResult<()> {
+    let CliAndEnvArgs {
+        args,
+        multi_containers,
+    } = &agent_args;
+
     debug!("start_iptable_guard -> Initializing iptable-guard.");
 
     // TODO(alex) [high] 2026-04-07 4: Now we just need to update this stuff so it deals
     // with multi-containers.
-    let state = State::new(&args).await?;
+    let state = State::new_multi_containers(&agent_args).await?;
     let with_mesh_exclusion = state.is_with_mesh_exclusion();
 
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())?;
@@ -1125,7 +1238,10 @@ pub async fn main() -> AgentResult<()> {
     let multi_containers = envs::MULTI_CONTAINERS.from_env_or_default();
     debug!("multi containers: {multi_containers:?}");
 
-    let agent_args = AgentArgs { args, multi_containers }
+    let agent_args = CliAndEnvArgs {
+        args,
+        multi_containers,
+    };
 
     if agent_args.args.mode.is_targetless() || second_process {
         start_agent(agent_args).await

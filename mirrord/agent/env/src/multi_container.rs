@@ -22,7 +22,43 @@ use serde::{Deserialize, Serialize};
     Ord,
 )]
 pub struct MultiContainerThingy {
-    pub name: String,
-    pub id: String,
-    pub port: u16,
+    name: String,
+    id: String,
+    ephemeral: bool,
+    port: u16,
+}
+
+impl MultiContainerThingy {
+    pub fn new(name: String, id: String, ephemeral: bool, port: u16) -> Self {
+        Self {
+            name,
+            id,
+            ephemeral,
+            port,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self
+            .id
+            .split_once(":")
+            .expect("Should be in the format `[runtime]://[id]`")
+            .1
+    }
+
+    pub fn runtime(&self) -> &str {
+        &self
+            .id
+            .split_once(":")
+            .expect("Should be in the format `[runtime]://[id]`")
+            .0
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn ephemeral(&self) -> bool {
+        self.ephemeral
+    }
 }

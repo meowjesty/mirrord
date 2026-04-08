@@ -3,14 +3,16 @@
 use std::{collections::BTreeSet, net::SocketAddr};
 
 use clap::{Parser, Subcommand};
-use mirrord_agent_env::{envs, multi_container::MultiContainerThingy};
+use mirrord_agent_env::{checked_env::EnvValue, envs, multi_container::MultiContainerThingy};
+
+use crate::error::AgentResult;
 
 const DEFAULT_RUNTIME: &str = "containerd";
 
 /// **Heads-up**: Order of arguments passed to this matter, so if you add a new arg after something
 /// like `Targeted`, it won't work, as `Mode` is a `subcommand`. You would need to add the arg in
 /// `Mode::Targeted` for it to work (that's why `--mesh` is there and not here).
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     #[clap(subcommand)]
@@ -66,6 +68,10 @@ pub struct Args {
     pub clean_iptables_on_start: bool,
 }
 
+fn default_crap() -> BTreeSet<MultiContainerThingy> {
+    BTreeSet::new()
+}
+
 #[derive(Clone, Debug, Default, Subcommand)]
 pub enum Mode {
     Targeted {
@@ -101,8 +107,8 @@ pub fn parse_args() -> Args {
     Args::try_parse().unwrap_or_else(|err| err.exit())
 }
 
-#[derive(Debug)]
-pub(crate) struct AgentArgs {
-    pub(crate) args: Args,
+#[derive(Debug, Clone)]
+pub(crate) struct CliAndEnvArgs {
     pub(crate) multi_containers: BTreeSet<MultiContainerThingy>,
+    pub(crate) args: Args,
 }

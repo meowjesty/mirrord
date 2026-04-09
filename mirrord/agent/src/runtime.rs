@@ -42,6 +42,7 @@ const DEFAULT_CONTAINERD_NAMESPACE: &str = "k8s.io";
 
 #[derive(Debug)]
 pub(crate) struct ContainerInfo {
+    pub(crate) id: String,
     /// External PID of the container
     pub(crate) pid: u64,
     /// Environment variables of the container
@@ -49,8 +50,8 @@ pub(crate) struct ContainerInfo {
 }
 
 impl ContainerInfo {
-    pub(crate) fn new(pid: u64, env: HashMap<String, String>) -> Self {
-        ContainerInfo { pid, env }
+    pub(crate) fn new(id: String, pid: u64, env: HashMap<String, String>) -> Self {
+        ContainerInfo { id, pid, env }
     }
 }
 
@@ -138,7 +139,7 @@ impl ContainerRuntime for DockerContainer {
             })?;
         let env_vars = parse_raw_env(&raw_env);
 
-        Ok(ContainerInfo::new(pid, env_vars))
+        Ok(ContainerInfo::new(self.container_id.clone(), pid, env_vars))
     }
 }
 
@@ -266,7 +267,11 @@ impl ContainerRuntime for ContainerdContainer {
             ContainerRuntimeError::containerd("env not found in container runtime response")
         })?;
 
-        Ok(ContainerInfo::new(pid as u64, env_vars))
+        Ok(ContainerInfo::new(
+            self.container_id.clone(),
+            pid as u64,
+            env_vars,
+        ))
     }
 }
 
@@ -371,6 +376,7 @@ impl ContainerRuntime for EphemeralContainer {
     #[tracing::instrument(level = Level::TRACE, ret, err)]
     async fn get_info(&self) -> ContainerRuntimeResult<ContainerInfo> {
         Ok(ContainerInfo::new(
+            self.container_id.clone(),
             find_pid_for_ephemeral(&self.container_id)
                 .await
                 .unwrap_or_else(|fail| {

@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use tracing::Level;
+
 use crate::{
     error::AgentResult,
     runtime::{Container, ContainerInfo, ContainerRuntime},
@@ -7,6 +9,7 @@ use crate::{
 
 #[derive(Debug)]
 struct Inner {
+    id: String,
     /// Cached process ID of the container.
     pid: u64,
     /// Cached environment of the container.
@@ -21,11 +24,15 @@ pub(crate) struct ContainerHandle(Arc<Inner>);
 
 impl ContainerHandle {
     /// Retrieve info about the container and initialize this struct.
-    #[tracing::instrument(level = "trace")]
+    #[tracing::instrument(level = Level::DEBUG)]
     pub(crate) async fn new(container: Container) -> AgentResult<Self> {
-        let ContainerInfo { pid, env: raw_env } = container.get_info().await?;
+        let ContainerInfo {
+            id,
+            pid,
+            env: raw_env,
+        } = container.get_info().await?;
 
-        let inner = Inner { pid, raw_env };
+        let inner = Inner { id, pid, raw_env };
 
         Ok(Self(inner.into()))
     }
@@ -33,6 +40,10 @@ impl ContainerHandle {
     /// Return the process ID of the container.
     pub(crate) fn pid(&self) -> u64 {
         self.0.pid
+    }
+
+    pub(crate) fn id(&self) -> &str {
+        &self.0.id
     }
 
     /// Return environment variables from the container.

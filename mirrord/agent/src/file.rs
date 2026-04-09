@@ -94,8 +94,11 @@ impl Iterator for GetDEnts64Stream {
     }
 }
 
+type ContainerId = String;
+
 #[derive(Debug)]
 pub(crate) struct FileManager {
+    container_ids: HashMap<ContainerId, u64>,
     /// [`None`] when targetless.
     path_resolver: Option<InTargetPathResolver>,
     open_files: HashMap<u64, RemoteFile>,
@@ -268,16 +271,23 @@ impl FileManager {
     }
 
     #[tracing::instrument(level = Level::TRACE, ret)]
-    pub fn new(pid: Option<u64>) -> Self {
+    pub(super) fn new(container_id: String, pid: Option<u64>) -> Self {
         let path_resolver = pid.map(InTargetPathResolver::new);
 
         Self {
+            container_ids: HashMap::from_iter([(container_id, pid.unwrap_or(1))]),
             path_resolver,
             open_files: Default::default(),
             dir_streams: Default::default(),
             getdents_streams: Default::default(),
             fds_iter: (0..=u64::MAX),
         }
+    }
+
+    pub(super) fn switch_container(&mut self, container_pid: u64) {
+        let path_resolver = InTargetPathResolver::new(container_pid);
+
+        self.path_resolver = Some(path_resolver);
     }
 
     #[tracing::instrument(level = Level::TRACE)]

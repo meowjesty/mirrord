@@ -186,6 +186,15 @@ pub enum ClientMessage {
     ///
     /// Sent by the operator when enforcing hostname-based outgoing network policies.
     ReverseDnsLookup(ReverseDnsLookupRequest),
+
+    SwitchContainer(SwitchContainer),
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
+pub struct SwitchContainer {
+    pub runtime: String,
+    pub id: String,
+    pub name: String,
 }
 
 /// Type alias for `Result`s that should be returned from mirrord-agent to mirrord-layer.

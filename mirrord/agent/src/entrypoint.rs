@@ -20,7 +20,7 @@ use mirrord_agent_iptables::{
     IPTablesWrapper, SafeIpTables,
     error::{IPTablesError, IPTablesResult},
 };
-use mirrord_protocol::{ClientMessage, DaemonMessage, GetEnvVarsRequest};
+use mirrord_protocol::{ClientMessage, DaemonMessage, GetEnvVarsRequest, SwitchContainer};
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream},
     process::Command,
@@ -77,6 +77,8 @@ or the previous agent failed to clean up before exit. \
 The leftover rules were cleaned and the agent is starting. \
 To allow concurrent sessions, consider using the operator available in mirrord for Teams: https://app.metalbear.com/?utm_source=dirtyiptables&utm_medium=agent";
 
+type ContainerId = String;
+
 /// Keeps track of next client id.
 /// Stores common data used when serving client connections.
 /// Can be cheaply cloned and passed to per-client background tasks.
@@ -94,9 +96,41 @@ struct State {
     tls_connector: Option<AgentTlsConnector>,
     /// [`tokio::runtime`] that should be used for network operations ([`BackgroundTasks`]).
     network_runtime: Arc<BgTaskRuntime>,
+
+    multi_containers: HashMap<ContainerId, ContainerHandle>,
 }
 
 impl State {
+    async fn switch_container(
+        &mut self,
+        SwitchContainer { runtime, id, name }: SwitchContainer,
+    ) -> AgentResult<u64> {
+        let pid = match self.multi_containers.get(&id) {
+            Some(cached_container) => {
+                // TODO(alex) [high] 2026-04-09 2: What else do we need to update state-wise here?
+                let pid = cached_container.pid();
+                self.container = Some(cached_container.clone());
+
+                pid
+            }
+            None => {
+                let container = get_container(id.clone(), &runtime).await?;
+                let container_handle = ContainerHandle::new(container).await?;
+
+                // TODO(alex) [high] 2026-04-09 1: Use container env/environ, or does every
+                // container share the same env, similar to how they share network?
+                self.multi_containers.insert(id, container_handle.clone());
+
+                let pid = container_handle.pid();
+                self.container = Some(container_handle);
+
+                pid
+            }
+        };
+
+        Ok(pid)
+    }
+
     /// Return [`Err`] if container runtime operations failed.
     #[tracing::instrument(level = Level::TRACE, err)]
     pub async fn new(args: &Args) -> AgentResult<State> {
@@ -165,17 +199,27 @@ impl State {
 
         Ok(State {
             next_client_id: Default::default(),
-            container,
+            container: container.clone(),
             env: Arc::new(env),
             ephemeral,
             tls_connector,
             network_runtime: Arc::new(network_runtime),
+            multi_containers: container
+                .map(|c| HashMap::from_iter([(c.id().to_string(), c)]))
+                .unwrap_or_default(),
         })
     }
 
     /// Return the process ID of the target container if there is one.
     pub fn container_pid(&self) -> Option<u64> {
         self.container.as_ref().map(ContainerHandle::pid)
+    }
+
+    pub fn container_id(&self) -> &str {
+        self.container
+            .as_ref()
+            .map(ContainerHandle::id)
+            .expect("TODO(alex): check if this is ok for targetless and ephemeral targets")
     }
 
     pub async fn serve_client_connection(
@@ -299,7 +343,10 @@ impl ClientConnectionHandler {
 
         let pid = state.container_pid();
 
-        let file_manager = FileManager::new(pid.or_else(|| state.ephemeral.then_some(1)));
+        let file_manager = FileManager::new(
+            state.container_id().to_string(),
+            pid.or_else(|| state.ephemeral.then_some(1)),
+        );
 
         let tcp_mirror_api = bg_tasks
             .mirror_handle
@@ -471,6 +518,10 @@ impl ClientConnectionHandler {
     #[tracing::instrument(level = Level::TRACE, skip(self), ret, err(level = Level::DEBUG))]
     async fn handle_client_message(&mut self, message: ClientMessage) -> AgentResult<bool> {
         match message {
+            ClientMessage::SwitchContainer(request) => {
+                let container_pid = self.state.switch_container(request).await?;
+                self.file_manager.switch_container(container_pid);
+            }
             ClientMessage::FileRequest(req) => {
                 if let Some(response) = self.file_manager.handle_message(req)? {
                     self.respond(DaemonMessage::File(response))

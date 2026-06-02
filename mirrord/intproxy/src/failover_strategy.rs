@@ -13,6 +13,7 @@ use crate::{
     layer_conn::LayerConnection,
     layer_initializer::LayerInitializer,
     main_tasks::{FromLayer, MainTaskId, ProxyMessage},
+    session_monitor::ChaosWatcherRx,
 };
 
 /// This struct is a strategy that handle failover logic for [`IntProxy`].
@@ -30,6 +31,7 @@ pub(super) struct FailoverStrategy {
     pending_layers: Vec<(LayerId, MessageId)>,
     any_connection_accepted: bool,
     fail_cause: ProxyRuntimeError,
+    chaos_rx: ChaosWatcherRx,
 }
 
 impl FailoverStrategy {
@@ -37,14 +39,25 @@ impl FailoverStrategy {
         !self.layers.is_empty()
     }
 
-    pub fn from_failed_proxy(failed_proxy: IntProxy, error: ProxyRuntimeError) -> Self {
+    pub fn from_failed_proxy(
+        IntProxy {
+            any_connection_accepted,
+            background_tasks,
+            task_txs,
+            pending_layers,
+            chaos_rx,
+            ..
+        }: IntProxy,
+        error: ProxyRuntimeError,
+    ) -> Self {
         FailoverStrategy {
-            background_tasks: failed_proxy.background_tasks,
-            layer_initializer: failed_proxy.task_txs._layer_initializer,
-            layers: failed_proxy.task_txs.layers,
-            pending_layers: failed_proxy.pending_layers.into_iter().collect(),
-            any_connection_accepted: failed_proxy.any_connection_accepted,
+            background_tasks,
+            layer_initializer: task_txs._layer_initializer,
+            layers: task_txs.layers,
+            pending_layers: pending_layers.into_iter().collect(),
+            any_connection_accepted,
             fail_cause: error,
+            chaos_rx,
         }
     }
 
@@ -125,11 +138,11 @@ impl FailoverStrategy {
                 }
             },
 
-            (_, TaskUpdate::Message(msg)) => self.handle(msg).await,
+            (_, TaskUpdate::Message(msg)) => self.handle(msg, self.chaos_rx.clone()).await,
         }
     }
 
-    async fn handle(&mut self, msg: ProxyMessage) {
+    async fn handle(&mut self, msg: ProxyMessage, chaos_rx: ChaosWatcherRx) {
         match msg {
             ProxyMessage::NewLayer(new_layer) => {
                 self.any_connection_accepted = true;
@@ -137,6 +150,7 @@ impl FailoverStrategy {
                     LayerConnection::new(new_layer.stream, new_layer.id),
                     MainTaskId::LayerConnection(new_layer.id),
                     IntProxy::CHANNEL_SIZE,
+                    chaos_rx,
                 );
                 self.layers.insert(new_layer.id, tx);
             }

@@ -182,6 +182,7 @@ impl IntProxy {
             LayerInitializer::new(listener),
             MainTaskId::LayerInitializer,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
 
         let agent_conn_reconnectable = agent_conn.reconnectable();
@@ -203,21 +204,23 @@ impl IntProxy {
             ),
             MainTaskId::PingPong,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
         let simple = background_tasks.register(
             SimpleProxy::new(experimental.dns_permission_error_fatal),
             MainTaskId::SimpleProxy,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
         let outgoing = background_tasks.register(
             OutgoingProxy::new(
                 experimental.non_blocking_tcp_connect.unwrap_or_default(),
                 experimental.latency.receive_delay,
                 experimental.latency.transmit_delay,
-                chaos_rx,
             ),
             MainTaskId::OutgoingProxy,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
         let incoming = background_tasks.register(
             IncomingProxy::new(
@@ -227,11 +230,13 @@ impl IntProxy {
             ),
             MainTaskId::IncomingProxy,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
         let files = background_tasks.register(
             FilesProxy::new(file_buffer_size),
             MainTaskId::FilesProxy,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
 
         let agent_tx = agent_conn.connection.tx_handle();
@@ -240,6 +245,7 @@ impl IntProxy {
             agent_conn,
             MainTaskId::AgentConnection,
             Self::CHANNEL_SIZE,
+            chaos_rx.clone(),
         );
 
         let mut ping_pong_update_debounce = time::interval(Self::PING_INTERVAL / 10);
@@ -270,6 +276,7 @@ impl IntProxy {
             process_logging_interval,
             agent_tx,
             monitor_tx,
+            chaos_rx,
         }
     }
 
@@ -408,6 +415,7 @@ impl IntProxy {
                     LayerConnection::new(new_layer.stream, new_layer.id),
                     MainTaskId::LayerConnection(new_layer.id),
                     Self::CHANNEL_SIZE,
+                    self.chaos_rx.clone(),
                 );
                 self.task_txs.layers.insert(new_layer.id, tx);
 

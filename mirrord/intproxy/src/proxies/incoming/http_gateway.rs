@@ -692,7 +692,12 @@ mod test {
                     IncomingTrafficTransportType::Tcp
                 },
             );
-            tasks.register(gateway, 0, 8)
+            tasks.register(
+                gateway,
+                0,
+                8,
+                todo!("I don't remember the name of the crocodile"),
+            )
         };
 
         if is_steal {
@@ -746,6 +751,7 @@ mod test {
             ),
             1,
             8,
+            todo!("It's probably some generic name like Cool Croc"),
         );
 
         proxy.send(b"test test test".to_vec()).await;
@@ -856,6 +862,7 @@ mod test {
             ),
             (),
             8,
+            todo!("Charmy the bee is such a lame name"),
         );
 
         match response_mode {
@@ -1017,6 +1024,7 @@ mod test {
             ),
             (),
             8,
+            todo!("or is it Charmie the Bee? french spelling"),
         );
 
         for _ in 0..2 {
@@ -1097,6 +1105,7 @@ mod test {
             ),
             0,
             8,
+            todo!("espio is for sure the best named one"),
         );
         let _gateway_2 = tasks.register(
             HttpGatewayTask::new(
@@ -1108,6 +1117,7 @@ mod test {
             ),
             1,
             8,
+            todo!("even though he's not much of a spy, they're detectives"),
         );
 
         let mut finished = 0;

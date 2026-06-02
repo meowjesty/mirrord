@@ -1,6 +1,9 @@
+use anyhow::Context;
 use axum::{
     Json, Router,
     extract::{Path, State},
+    http::{self, StatusCode},
+    response::{IntoResponse, Response},
     routing::{post, put},
 };
 use serde_json::Value;
@@ -33,10 +36,10 @@ DELETE /chaos/rules/{session_id}: clear all rules for session*/
 //
 // This `Client` is used to send a reqwest (lol) to `monitor:localhost/chaos/1234`, and in there ...
 // (go to the file `chaos.rs` in `/intproxy`).
-fn chaos_router(state: AppState) -> Router {
+pub(super) fn chaos_router() -> Router<AppState> {
     Router::new()
         .route(
-            "/{session_id}",
+            "/rules/{session_id}",
             post(post_create_rule)
                 .delete(delete_clear_session_rules)
                 .get(get_list_active_rules_for_session),
@@ -45,10 +48,30 @@ fn chaos_router(state: AppState) -> Router {
             "/{session_id}/{rule_id}",
             put(put_update_rule).delete(delete_rule).get(get_rule),
         )
-        .with_state(state)
 }
 
-type ChaosResult<T> = anyhow::Result<T>;
+#[derive(Debug)]
+struct ApiError(anyhow::Error);
+
+impl<E> From<E> for ApiError
+where
+    E: Into<anyhow::Error>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Something went wrong: {}", self.0),
+        )
+            .into_response()
+    }
+}
+
+type ChaosResult<T> = Result<T, ApiError>;
 
 async fn post_create_rule(
     Path(session_id): Path<String>,
@@ -56,6 +79,8 @@ async fn post_create_rule(
     Json(new_rule): Json<Value>,
 ) -> ChaosResult<()> {
     let sessions = state.sessions.read().await;
+
+    println!("{session_id} !!! {new_rule:?}");
 
     match sessions.get(&session_id) {
         Some(session) => {

@@ -47,7 +47,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::{debug, error, info, warn};
 
-use crate::{config::UiArgs, error::CliError};
+use crate::{config::UiArgs, error::CliError, ui::chaos::chaos_router};
 
 const MAX_EVENTS_PER_SESSION: usize = 500;
 
@@ -857,6 +857,7 @@ fn build_router(state: AppState) -> Router {
     let authenticated_routes = Router::new()
         .nest("/api", api_routes)
         .route("/ws", get(ws_handler))
+        .nest("/chaos", chaos_router())
         .fallback(static_handler)
         .layer(middleware::from_fn_with_state(state.clone(), token_auth));
 

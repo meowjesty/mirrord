@@ -43,6 +43,7 @@ use crate::{
 };
 
 mod interceptor;
+mod message_bus;
 mod net_protocol_ext;
 
 /// Errors that can occur when handling the `outgoing` feature.
@@ -221,7 +222,6 @@ pub struct OutgoingProxy {
     connections_in_layers: RemoteResources<u128>,
     /// Maps outgoing connection local IDs to local addresses of corresponding agent sockets.
     agent_local_addresses: HashMap<u128, SocketAddr>,
-    chaos_rx: ChaosWatcherRx,
 }
 
 impl OutgoingProxy {
@@ -239,7 +239,6 @@ impl OutgoingProxy {
         non_blocking_tcp_connect: bool,
         receive_delay_ms: u64,
         transmit_delay_ms: u64,
-        chaos_rx: ChaosWatcherRx,
     ) -> Self {
         Self {
             datagrams_reqs: Default::default(),
@@ -253,7 +252,6 @@ impl OutgoingProxy {
             transmit_delay_ms,
             connections_in_layers: Default::default(),
             agent_local_addresses: Default::default(),
-            chaos_rx,
         }
     }
 
@@ -432,6 +430,7 @@ impl OutgoingProxy {
             Interceptor::new(id, prepared_socket),
             id,
             Self::CHANNEL_SIZE,
+            message_bus.chaos_rx.clone(),
         );
         self.txs.insert(id, interceptor);
 
@@ -462,7 +461,7 @@ impl OutgoingProxy {
 
         if (request.protocol == NetProtocol::Seqpacket) && supports_seqpacket.not() {
             message_bus
-                .send(ToLayer {
+                .send_chaos(ToLayer {
                     message: ProxyToLayerMessage::Outgoing(OutgoingResponse::Connect(Err(
                         ResponseError::NotImplemented,
                     ))),
@@ -500,7 +499,7 @@ impl OutgoingProxy {
                     },
                 ))),
             };
-            message_bus.send(to_layer).await;
+            message_bus.send_chaos(to_layer).await;
 
             Some(listener)
         } else {
@@ -540,7 +539,7 @@ impl OutgoingProxy {
         let msg = request
             .protocol
             .wrap_agent_connect(request.remote_address, uid);
-        message_bus.send_agent(msg).await;
+        message_bus.send_agent_chaos(msg).await;
 
         Ok(())
     }
@@ -564,7 +563,7 @@ impl OutgoingProxy {
                 );
                 while let Some((message_id, layer_id)) = self.datagrams_reqs.pop_front() {
                     message_bus
-                        .send(ToLayer::from(AgentLostOutgoingResponse(
+                        .send_chaos(ToLayer::from(AgentLostOutgoingResponse(
                             layer_id, message_id,
                         )))
                         .await;
@@ -576,7 +575,7 @@ impl OutgoingProxy {
                 );
                 while let Some((message_id, layer_id)) = self.stream_reqs.pop_front() {
                     message_bus
-                        .send(ToLayer::from(AgentLostOutgoingResponse(
+                        .send_chaos(ToLayer::from(AgentLostOutgoingResponse(
                             layer_id, message_id,
                         )))
                         .await;
@@ -588,7 +587,7 @@ impl OutgoingProxy {
                 );
                 for in_progress in std::mem::take(&mut self.v2_reqs).into_values() {
                     message_bus
-                        .send(ToLayer::from(AgentLostOutgoingResponse(
+                        .send_chaos(ToLayer::from(AgentLostOutgoingResponse(
                             in_progress.layer_id,
                             in_progress.message_id,
                         )))
@@ -631,7 +630,7 @@ impl OutgoingProxy {
                         response,
                     )),
                 };
-                message_bus.send(to_layer).await;
+                message_bus.send_chaos(to_layer).await;
                 Ok(())
             }
             OutgoingRequest::Close(req) => {
@@ -743,7 +742,7 @@ impl BackgroundTask for OutgoingProxy {
                         }
 
                         let msg = id.protocol.wrap_agent_write(id.connection_id, bytes);
-                        message_bus.send_agent(msg).await;
+                        message_bus.send_agent_chaos(msg).await;
                     }
                     (id, TaskUpdate::Finished(res)) => {
                         match res {
@@ -759,7 +758,7 @@ impl BackgroundTask for OutgoingProxy {
                         if self.txs.remove(&id).is_some() {
                             tracing::trace!(%id, "Local connection closed, notifying the agent");
                             let msg = id.protocol.wrap_agent_close(id.connection_id);
-                            let _ = message_bus.send_agent(msg).await;
+                            let _ = message_bus.send_agent_chaos(msg).await;
                             self.txs.remove(&id);
                         }
                     }
@@ -802,9 +801,10 @@ mod test {
         let mut background_tasks: BackgroundTasks<(), ProxyMessage, OutgoingProxyError> =
             BackgroundTasks::new(connection.tx_handle());
         let outgoing = background_tasks.register(
-            OutgoingProxy::new(false, 0, 0, todo!("espio fan numero uno")),
+            OutgoingProxy::new(false, 0, 0),
             (),
             8,
+            todo!("espio fan numero uno"),
         );
 
         for i in 0..=1 {

@@ -26,11 +26,11 @@ pub type MessageBus<T> =
 /// A struct that is meant to be the only way the [`BackgroundTask`]s can communicate with their
 /// parents. It allows the tasks to send and receive messages.
 pub struct MessageBusInner<MessageIn, MessageOut> {
-    tx: Sender<MessageOut>,
+    pub(crate) tx: Sender<MessageOut>,
     rx: Receiver<MessageIn>,
-    agent_tx: TxHandle<Client>,
+    pub(crate) agent_tx: TxHandle<Client>,
     token: CancellationToken,
-    chaos_rx: ChaosWatcherRx,
+    pub(crate) chaos_rx: ChaosWatcherRx,
 }
 
 impl<MessageIn, MessageOut> MessageBusInner<MessageIn, MessageOut> {

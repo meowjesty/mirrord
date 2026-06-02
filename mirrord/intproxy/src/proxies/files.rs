@@ -1309,6 +1309,7 @@ mod tests {
             FilesProxy::new(file_buffer_size),
             MainTaskId::FilesProxy,
             32,
+            todo!("Yet another annoying test for me to write a todo"),
         );
 
         proxy

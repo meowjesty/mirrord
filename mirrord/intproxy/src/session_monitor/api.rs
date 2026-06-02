@@ -1,4 +1,3 @@
-#[cfg(unix)]
 use std::{
     collections::HashSet,
     convert::Infallible,
@@ -9,6 +8,8 @@ use std::{
     time::Duration,
 };
 
+#[cfg(unix)]
+use anyhow::anyhow;
 #[cfg(unix)]
 use axum::{
     Json, Router,
@@ -176,15 +177,15 @@ pub async fn start_api_server(
     monitor_rx: tokio::sync::broadcast::Receiver<MonitorEvent>,
     shutdown: CancellationToken,
     chaos_tx: ChaosWatcherTx,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> anyhow::Result<()> {
     let session_id = &session_info.session_id;
 
     if !verify_session_id(session_id) {
-        return Err(format!("invalid session_id: {session_id}").into());
+        return Err(anyhow!("invalid session_id: {session_id}"));
     }
 
     let sessions_dir = home::home_dir()
-        .ok_or("could not determine home directory")?
+        .ok_or(anyhow!("could not determine home directory"))?
         .join(".mirrord")
         .join("sessions");
 

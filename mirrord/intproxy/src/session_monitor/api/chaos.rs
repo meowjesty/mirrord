@@ -34,7 +34,7 @@ DELETE /chaos/rules/{session_id}: clear all rules for session*/
 pub(super) fn chaos_router() -> Router<AppState> {
     Router::new()
         .route(
-            "/{session_id}",
+            "/rules/{session_id}",
             post(post_create_rule)
                 .delete(delete_clear_session_rules)
                 .get(get_list_active_rules_for_session),
@@ -46,6 +46,7 @@ pub(super) fn chaos_router() -> Router<AppState> {
 }
 
 async fn post_create_rule(State(state): State<AppState>, Json(new_rule): Json<Value>) -> () {
+    tracing::info!(?new_rule);
     state.chaos_tx.0.send_modify(|current_rules| {
         current_rules.insert(new_rule);
     });

@@ -325,21 +325,26 @@ impl IncomingProxy {
         let listening_on = subscription.listening_on.clone();
         tracing::info!(%listening_on, "Forwarding HTTP request");
 
-        let tx = self.tasks.as_mut().unwrap().register(
-            HttpGatewayTask::new(
-                request,
-                self.client_store.clone(),
-                is_steal.then_some(self.response_mode),
-                listening_on,
-                transport,
-            ),
-            if is_steal {
-                InProxyTask::StealHttpGateway(id)
-            } else {
-                InProxyTask::MirrorHttpGateway(id)
-            },
-            Self::CHANNEL_SIZE,
-        );
+        let tx = self
+            .tasks
+            .as_mut()
+            .expect("Should always have a task.")
+            .register(
+                HttpGatewayTask::new(
+                    request,
+                    self.client_store.clone(),
+                    is_steal.then_some(self.response_mode),
+                    listening_on,
+                    transport,
+                ),
+                if is_steal {
+                    InProxyTask::StealHttpGateway(id)
+                } else {
+                    InProxyTask::MirrorHttpGateway(id)
+                },
+                Self::CHANNEL_SIZE,
+                message_bus.chaos_rx.clone(),
+            );
         self.http_gateways
             .get_mut(is_steal)
             .entry(connection_id)
@@ -428,20 +433,25 @@ impl IncomingProxy {
         } else {
             InProxyTask::MirrorTcpProxy(connection_id)
         };
-        let tx = self.tasks.as_mut().unwrap().register(
-            TcpProxyTask::new(
-                connection_id,
-                LocalTcpConnection::FromTheStart {
-                    socket,
-                    peer: peer_address,
-                    transport,
-                    tls_setup: self.tls_setup.clone(),
-                },
-                is_steal.not(),
-            ),
-            id,
-            Self::CHANNEL_SIZE,
-        );
+        let tx = self
+            .tasks
+            .as_mut()
+            .expect("Should always have a task.")
+            .register(
+                TcpProxyTask::new(
+                    connection_id,
+                    LocalTcpConnection::FromTheStart {
+                        socket,
+                        peer: peer_address,
+                        transport,
+                        tls_setup: self.tls_setup.clone(),
+                    },
+                    is_steal.not(),
+                ),
+                id,
+                Self::CHANNEL_SIZE,
+                message_bus.chaos_rx.clone(),
+            );
 
         self.tcp_proxies.get_mut(is_steal).insert(connection_id, tx);
 
@@ -936,19 +946,24 @@ impl IncomingProxy {
 
                 match message {
                     HttpOut::Upgraded(on_upgrade) => {
-                        let proxy = self.tasks.as_mut().unwrap().register(
-                            TcpProxyTask::new(
-                                id.connection_id,
-                                LocalTcpConnection::AfterUpgrade(on_upgrade),
-                                is_steal.not(),
-                            ),
-                            if is_steal {
-                                InProxyTask::StealTcpProxy(id.connection_id)
-                            } else {
-                                InProxyTask::MirrorTcpProxy(id.connection_id)
-                            },
-                            Self::CHANNEL_SIZE,
-                        );
+                        let proxy = self
+                            .tasks
+                            .as_mut()
+                            .expect("Should always have a task!")
+                            .register(
+                                TcpProxyTask::new(
+                                    id.connection_id,
+                                    LocalTcpConnection::AfterUpgrade(on_upgrade),
+                                    is_steal.not(),
+                                ),
+                                if is_steal {
+                                    InProxyTask::StealTcpProxy(id.connection_id)
+                                } else {
+                                    InProxyTask::MirrorTcpProxy(id.connection_id)
+                                },
+                                Self::CHANNEL_SIZE,
+                                message_bus.chaos_rx.clone(),
+                            );
 
                         self.tcp_proxies
                             .get_mut(is_steal)

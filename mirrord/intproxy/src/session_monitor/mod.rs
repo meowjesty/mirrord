@@ -91,5 +91,23 @@ pub type TempChaosRules = HashSet<TempChaosRuleType>;
 #[derive(Clone, Default)]
 pub struct ChaosWatcherTx(pub watch::Sender<TempChaosRules>);
 
+pub enum ChaosRule {
+    TcpOutgoingConnect,
+}
+
 #[derive(Clone)]
 pub struct ChaosWatcherRx(pub watch::Receiver<TempChaosRules>);
+
+impl ChaosWatcherRx {
+    pub fn get_rule(&self, rule: ChaosRule) -> Option<TempChaosRuleType> {
+        let stored_rules = self.0.borrow();
+        stored_rules
+            .iter()
+            .find(|r| {
+                r.get("connect_to_google")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true)
+            })
+            .cloned()
+    }
+}

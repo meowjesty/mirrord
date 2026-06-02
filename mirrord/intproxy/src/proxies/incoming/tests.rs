@@ -70,7 +70,12 @@ async fn http_request_terminates_on_remote_close(#[case] steal_type: StealType) 
     let mut background_tasks: BackgroundTasks<(), ProxyMessage, IncomingProxyError> =
         BackgroundTasks::new(conn.tx_handle());
 
-    let proxy = background_tasks.register(proxy, (), 8);
+    let proxy = background_tasks.register(
+        proxy,
+        (),
+        8,
+        todo!("Holy smokes another test that needs this"),
+    );
 
     proxy
         .send(IncomingProxyMessage::AgentProtocolVersion(

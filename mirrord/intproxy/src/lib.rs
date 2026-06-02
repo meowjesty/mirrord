@@ -34,8 +34,8 @@ use proxies::{
 use semver::Version;
 use tokio::{
     net::TcpListener,
-    time,
-    time::{Interval, MissedTickBehavior},
+    sync::watch,
+    time::{self, Interval, MissedTickBehavior},
 };
 
 use crate::{
@@ -44,7 +44,9 @@ use crate::{
     error::{ProxyRuntimeError, ProxyStartupError},
     failover_strategy::FailoverStrategy,
     main_tasks::{ConnectionRefresh, LayerClosed},
-    session_monitor::{MonitorEvent, MonitorTx, RedactedVarNames},
+    session_monitor::{
+        ChaosWatcherRx, ChaosWatcherTx, MonitorEvent, MonitorTx, RedactedVarNames, TempChaosRules,
+    },
 };
 
 pub mod agent_conn;
@@ -145,6 +147,8 @@ pub struct IntProxy {
 
     /// Session monitor event sender
     monitor_tx: MonitorTx,
+
+    chaos_rx: ChaosWatcherRx,
 }
 
 impl IntProxy {
@@ -169,6 +173,7 @@ impl IntProxy {
         process_logging_interval: Duration,
         experimental: &ExperimentalConfig,
         monitor_tx: MonitorTx,
+        chaos_rx: ChaosWatcherRx,
     ) -> Self {
         let mut background_tasks: BackgroundTasks<MainTaskId, ProxyMessage, ProxyRuntimeError> =
             BackgroundTasks::new(agent_conn.connection.tx_handle());
@@ -209,6 +214,7 @@ impl IntProxy {
                 experimental.non_blocking_tcp_connect.unwrap_or_default(),
                 experimental.latency.receive_delay,
                 experimental.latency.transmit_delay,
+                chaos_rx,
             ),
             MainTaskId::OutgoingProxy,
             Self::CHANNEL_SIZE,
@@ -900,6 +906,7 @@ mod test {
                 .generate_config(&mut Default::default())
                 .unwrap(),
             MonitorTx::disabled(),
+            todo!("I'm too cool to care about test code"),
         );
         let proxy_handle = tokio::spawn(proxy.run(Duration::from_secs(60), Duration::ZERO));
 
@@ -1019,6 +1026,7 @@ mod test {
                 .generate_config(&mut Default::default())
                 .unwrap(),
             MonitorTx::disabled(),
+            todo!("I'm still still too cool to care about test code"),
         );
         let proxy_handle = tokio::spawn(proxy.run(Duration::from_secs(60), Duration::ZERO));
 
@@ -1113,6 +1121,7 @@ mod test {
                 .generate_config(&mut Default::default())
                 .unwrap(),
             MonitorTx::disabled(),
+            todo!("I'm still still still too cool to care about test code"),
         );
         tokio::time::timeout(
             Duration::from_millis(200),
@@ -1185,6 +1194,7 @@ mod test {
                 .generate_config(&mut Default::default())
                 .unwrap(),
             MonitorTx::disabled(),
+            todo!("I'm a chameleon, what do I know about tests?"),
         );
         tokio::spawn(proxy.run(Duration::from_millis(100), Duration::ZERO));
 

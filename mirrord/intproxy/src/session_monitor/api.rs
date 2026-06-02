@@ -1,5 +1,6 @@
 #[cfg(unix)]
 use std::{
+    collections::HashSet,
     convert::Infallible,
     fs,
     os::unix::fs::PermissionsExt,
@@ -22,7 +23,7 @@ use mirrord_session_monitor_protocol::{PortSubscription, ProcessInfo, SessionInf
 #[cfg(unix)]
 use tokio::{
     net::UnixListener,
-    sync::{RwLock, broadcast::error::RecvError},
+    sync::{RwLock, broadcast::error::RecvError, watch},
 };
 #[cfg(unix)]
 use tokio_stream::{StreamExt, wrappers::BroadcastStream};
@@ -31,14 +32,22 @@ use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
 use super::{MonitorEvent, MonitorTx};
+#[cfg(unix)]
+use crate::session_monitor::{
+    ChaosWatcherTx, TempChaosRuleType, TempChaosRules, api::chaos::chaos_router,
+};
+
+mod chaos;
 
 /// Per-session API state. Access control is provided by Unix socket file
 /// permissions (`0o600`), so the HTTP layer itself is unauthenticated.
 #[cfg(unix)]
+#[derive(Clone)]
 struct AppState {
-    session_info: RwLock<SessionInfo>,
+    session_info: Arc<RwLock<SessionInfo>>,
     monitor_tx: MonitorTx,
     shutdown: CancellationToken,
+    chaos_tx: ChaosWatcherTx,
 }
 
 #[cfg(unix)]
@@ -61,14 +70,14 @@ async fn health() -> impl IntoResponse {
 }
 
 #[cfg(unix)]
-async fn info(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn info(State(state): State<AppState>) -> impl IntoResponse {
     let info = state.session_info.read().await;
     Json(info.clone())
 }
 
 #[cfg(unix)]
 async fn events(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let rx = state
         .monitor_tx
@@ -94,14 +103,14 @@ async fn events(
 /// Cancels the API server's cancellation token, triggering graceful shutdown of the API server
 /// only. The mirrord session lifecycle is managed separately by the intproxy.
 #[cfg(unix)]
-async fn kill(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn kill(State(state): State<AppState>) -> impl IntoResponse {
     state.shutdown.cancel();
     Json(serde_json::json!({"status": "shutting_down"}))
 }
 
 #[cfg(unix)]
 async fn update_session_info_from_events(
-    state: Arc<AppState>,
+    state: AppState,
     mut rx: tokio::sync::broadcast::Receiver<MonitorEvent>,
 ) {
     loop {
@@ -166,6 +175,7 @@ pub async fn start_api_server(
     monitor_tx: MonitorTx,
     monitor_rx: tokio::sync::broadcast::Receiver<MonitorEvent>,
     shutdown: CancellationToken,
+    chaos_tx: ChaosWatcherTx,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let session_id = &session_info.session_id;
 
@@ -196,11 +206,12 @@ pub async fn start_api_server(
         path: socket_path.clone(),
     };
 
-    let state = Arc::new(AppState {
-        session_info: RwLock::new(session_info),
+    let state = AppState {
+        session_info: Arc::new(RwLock::new(session_info)),
         monitor_tx,
         shutdown: shutdown.clone(),
-    });
+        chaos_tx,
+    };
 
     tokio::spawn(update_session_info_from_events(state.clone(), monitor_rx));
 
@@ -209,6 +220,7 @@ pub async fn start_api_server(
         .route("/info", get(info))
         .route("/events", get(events))
         .route("/kill", post(kill))
+        .nest("/chaos", chaos_router())
         .with_state(state);
 
     tracing::info!(?socket_path, "Session monitor API server starting");

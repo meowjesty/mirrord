@@ -39,6 +39,7 @@ use crate::{
     proxies::outgoing::net_protocol_ext::{NetProtocolExt, PreparedSocket},
     remote_resources::RemoteResources,
     request_queue::RequestQueue,
+    session_monitor::ChaosWatcherRx,
 };
 
 mod interceptor;
@@ -220,6 +221,7 @@ pub struct OutgoingProxy {
     connections_in_layers: RemoteResources<u128>,
     /// Maps outgoing connection local IDs to local addresses of corresponding agent sockets.
     agent_local_addresses: HashMap<u128, SocketAddr>,
+    chaos_rx: ChaosWatcherRx,
 }
 
 impl OutgoingProxy {
@@ -237,6 +239,7 @@ impl OutgoingProxy {
         non_blocking_tcp_connect: bool,
         receive_delay_ms: u64,
         transmit_delay_ms: u64,
+        chaos_rx: ChaosWatcherRx,
     ) -> Self {
         Self {
             datagrams_reqs: Default::default(),
@@ -250,6 +253,7 @@ impl OutgoingProxy {
             transmit_delay_ms,
             connections_in_layers: Default::default(),
             agent_local_addresses: Default::default(),
+            chaos_rx,
         }
     }
 
@@ -797,7 +801,11 @@ mod test {
 
         let mut background_tasks: BackgroundTasks<(), ProxyMessage, OutgoingProxyError> =
             BackgroundTasks::new(connection.tx_handle());
-        let outgoing = background_tasks.register(OutgoingProxy::new(false, 0, 0), (), 8);
+        let outgoing = background_tasks.register(
+            OutgoingProxy::new(false, 0, 0, todo!("espio fan numero uno")),
+            (),
+            8,
+        );
 
         for i in 0..=1 {
             // Layer wants to make an outgoing connection.

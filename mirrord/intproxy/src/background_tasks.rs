@@ -18,6 +18,8 @@ use tokio::{
 use tokio_stream::{StreamExt, StreamMap, StreamNotifyClose, wrappers::ReceiverStream};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
+use crate::session_monitor::ChaosWatcherRx;
+
 pub type MessageBus<T> =
     MessageBusInner<<T as BackgroundTask>::MessageIn, <T as BackgroundTask>::MessageOut>;
 
@@ -28,6 +30,7 @@ pub struct MessageBusInner<MessageIn, MessageOut> {
     rx: Receiver<MessageIn>,
     agent_tx: TxHandle<Client>,
     token: CancellationToken,
+    chaos_rx: ChaosWatcherRx,
 }
 
 impl<MessageIn, MessageOut> MessageBusInner<MessageIn, MessageOut> {
@@ -191,7 +194,13 @@ where
     /// # Panics
     ///
     /// This method panics when attempting to register a task with a duplicate id.
-    pub fn register<T>(&mut self, mut task: T, id: Id, channel_size: usize) -> TaskSender<T>
+    pub fn register<T>(
+        &mut self,
+        mut task: T,
+        id: Id,
+        channel_size: usize,
+        chaos_rx: ChaosWatcherRx,
+    ) -> TaskSender<T>
     where
         T: 'static + BackgroundTask<MessageOut = MOut> + Send,
         Err: From<T::Error>,
@@ -216,6 +225,7 @@ where
             rx: in_msg_rx,
             token: token.clone(),
             agent_tx: self.agent_tx.another(),
+            chaos_rx,
         };
 
         self.handles.insert(
@@ -234,6 +244,7 @@ where
         task: T,
         id: Id,
         channel_size: usize,
+        chaos_rx: ChaosWatcherRx,
     ) -> TaskSender<RestartableBackgroundTaskWrapper<T>>
     where
         T: 'static + RestartableBackgroundTask<MessageOut = MOut> + Send,
@@ -241,7 +252,12 @@ where
         T::MessageIn: Send,
         T::Error: Send,
     {
-        self.register(RestartableBackgroundTaskWrapper { task }, id, channel_size)
+        self.register(
+            RestartableBackgroundTaskWrapper { task },
+            id,
+            channel_size,
+            chaos_rx,
+        )
     }
 
     pub fn clear(&mut self) {

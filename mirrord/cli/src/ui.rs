@@ -51,6 +51,8 @@ use crate::{config::UiArgs, error::CliError};
 
 const MAX_EVENTS_PER_SESSION: usize = 500;
 
+mod chaos;
+
 #[cfg(not(debug_assertions))]
 #[derive(Embed)]
 #[folder = "../../packages/monitor/dist/"]
@@ -222,10 +224,11 @@ impl Serialize for TrackedSession {
     }
 }
 
+#[derive(Clone)]
 struct AppState {
-    sessions: RwLock<HashMap<String, TrackedSession>>,
-    operator_sessions: RwLock<BTreeMap<String, OperatorSessionSummary>>,
-    operator_watch_status: RwLock<OperatorWatchStatus>,
+    sessions: Arc<RwLock<HashMap<String, TrackedSession>>>,
+    operator_sessions: Arc<RwLock<BTreeMap<String, OperatorSessionSummary>>>,
+    operator_watch_status: Arc<RwLock<OperatorWatchStatus>>,
     notify_tx: broadcast::Sender<SessionNotification>,
     token: String,
 }
@@ -252,7 +255,7 @@ struct TokenQuery {
 /// Middleware that validates the request carries a valid auth token, either via the `mirrord_token`
 /// cookie or the `?token=` query parameter.
 async fn token_auth(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     jar: CookieJar,
     Query(query): Query<TokenQuery>,
     request: Request,
@@ -324,7 +327,7 @@ async fn buffer_session_events(session_id: &str, values: Vec<serde_json::Value>,
 }
 
 /// Connects to a session's SSE /events endpoint and buffers events into the shared state.
-async fn stream_session_events(session_id: String, client: reqwest::Client, state: Arc<AppState>) {
+async fn stream_session_events(session_id: String, client: reqwest::Client, state: AppState) {
     let mut sse_stream = match open_sse_stream(&client).await {
         Ok(s) => s,
         Err(err) => {
@@ -355,13 +358,13 @@ async fn stream_session_events(session_id: String, client: reqwest::Client, stat
     remove_session(&session_id, &state).await;
 }
 
-async fn scan_existing_sessions(sessions_dir: &std::path::Path, state: &Arc<AppState>) {
+async fn scan_existing_sessions(sessions_dir: &std::path::Path, state: &AppState) {
     for (session_id, socket_path) in session_socket_entries(sessions_dir) {
         add_session(session_id, socket_path, state.clone()).await;
     }
 }
 
-async fn add_session(session_id: String, socket_path: PathBuf, state: Arc<AppState>) {
+async fn add_session(session_id: String, socket_path: PathBuf, state: AppState) {
     if state.sessions.read().await.contains_key(&session_id) {
         return;
     }
@@ -413,13 +416,13 @@ async fn remove_session(session_id: &str, state: &AppState) {
     }
 }
 
-async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
     let sessions = state.sessions.read().await;
     let list: Vec<SessionInfo> = sessions.values().map(|s| s.info.clone()).collect();
     axum::Json(list)
 }
 
-async fn get_session(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+async fn get_session(State(state): State<AppState>, Path(id): Path<String>) -> Response {
     let sessions = state.sessions.read().await;
     match sessions.get(&id) {
         Some(session) => axum::Json(session.info.clone()).into_response(),
@@ -427,10 +430,7 @@ async fn get_session(State(state): State<Arc<AppState>>, Path(id): Path<String>)
     }
 }
 
-async fn session_events_sse(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> Response {
+async fn session_events_sse(State(state): State<AppState>, Path(id): Path<String>) -> Response {
     let (buffered_events, client) = {
         let sessions = state.sessions.read().await;
         match sessions.get(&id) {
@@ -534,7 +534,7 @@ async fn current_user() -> axum::Json<CurrentUserResponse> {
 }
 
 async fn list_operator_sessions(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
 ) -> axum::Json<OperatorSessionsResponse> {
     let map = state.operator_sessions.read().await;
     let watch_status = state.operator_watch_status.read().await.clone();
@@ -552,7 +552,7 @@ async fn list_operator_sessions(
     })
 }
 
-async fn kill_session(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+async fn kill_session(State(state): State<AppState>, Path(id): Path<String>) -> Response {
     let (client, socket_path) = {
         let sessions = state.sessions.read().await;
         match sessions.get(&id) {
@@ -606,7 +606,7 @@ fn validate_ws_origin(headers: &HeaderMap) -> bool {
 async fn ws_handler(
     ws: WebSocketUpgrade,
     headers: HeaderMap,
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
 ) -> Response {
     if !validate_ws_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
@@ -614,7 +614,7 @@ async fn ws_handler(
     ws.on_upgrade(|socket| ws_connection(socket, state))
 }
 
-async fn ws_connection(mut socket: WebSocket, state: Arc<AppState>) {
+async fn ws_connection(mut socket: WebSocket, state: AppState) {
     {
         let sessions = state.sessions.read().await;
         for session in sessions.values() {
@@ -683,7 +683,7 @@ async fn static_handler(uri: axum::http::Uri) -> impl IntoResponse {
 /// Spawns a background task that rescans the sessions directory every 2 seconds.
 /// Filesystem watchers can miss events on macOS, so this serves as a fallback.
 #[cfg(target_os = "macos")]
-fn start_periodic_rescan(sessions_dir: PathBuf, state: Arc<AppState>) {
+fn start_periodic_rescan(sessions_dir: PathBuf, state: AppState) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
@@ -696,7 +696,7 @@ fn start_periodic_rescan(sessions_dir: PathBuf, state: Arc<AppState>) {
 /// to handle socket file creation and removal events.
 fn start_filesystem_watcher(
     sessions_dir: &std::path::Path,
-    state: Arc<AppState>,
+    state: AppState,
 ) -> Result<(), CliError> {
     let (watcher_tx, mut watcher_rx) = mpsc::channel::<notify::Event>(100);
 
@@ -747,7 +747,7 @@ fn start_filesystem_watcher(
     Ok(())
 }
 
-fn start_operator_watcher(state: Arc<AppState>) {
+fn start_operator_watcher(state: AppState) {
     tokio::spawn(async move {
         let client = match Client::try_default().await {
             Ok(client) => client,
@@ -845,7 +845,7 @@ async fn health() -> impl IntoResponse {
     axum::Json(serde_json::json!({"status": "ok"}))
 }
 
-fn build_router(state: Arc<AppState>) -> Router {
+fn build_router(state: AppState) -> Router {
     let api_routes = Router::new()
         .route("/sessions", get(list_sessions))
         .route("/sessions/{id}", get(get_session))
@@ -907,13 +907,13 @@ pub async fn ui_command(args: UiArgs) -> Result<(), CliError> {
     let token_bytes: [u8; 32] = rand::rng().random();
     let token = hex::encode(token_bytes);
 
-    let state = Arc::new(AppState {
-        sessions: RwLock::new(HashMap::new()),
-        operator_sessions: RwLock::new(BTreeMap::new()),
-        operator_watch_status: RwLock::new(OperatorWatchStatus::NotStarted),
+    let state = AppState {
+        sessions: Default::default(),
+        operator_sessions: Default::default(),
+        operator_watch_status: Arc::new(RwLock::new(OperatorWatchStatus::NotStarted)),
         notify_tx,
         token: token.clone(),
-    });
+    };
 
     scan_existing_sessions(&sessions_dir, &state).await;
     #[cfg(target_os = "macos")]
@@ -961,15 +961,15 @@ mod tests {
 
     const TEST_TOKEN: &str = "test-token-1234567890abcdef";
 
-    fn test_state() -> Arc<AppState> {
+    fn test_state() -> AppState {
         let (notify_tx, _) = broadcast::channel(16);
-        Arc::new(AppState {
-            sessions: RwLock::new(HashMap::new()),
-            operator_sessions: RwLock::new(BTreeMap::new()),
-            operator_watch_status: RwLock::new(OperatorWatchStatus::default()),
+        AppState {
+            sessions: Default::default(),
+            operator_sessions: Default::default(),
+            operator_watch_status: Default::default(),
             notify_tx,
             token: TEST_TOKEN.to_owned(),
-        })
+        }
     }
 
     fn req(uri: &str) -> Request<Body> {
@@ -1209,9 +1209,9 @@ mod tests {
         #[tokio::test]
         async fn operator_sessions_groups_by_key_with_none_bucket() {
             let (tx, _rx) = broadcast::channel::<SessionNotification>(16);
-            let state = Arc::new(AppState {
-                sessions: RwLock::new(HashMap::new()),
-                operator_sessions: RwLock::new({
+            let state = AppState {
+                sessions: Default::default(),
+                operator_sessions: Arc::new(RwLock::new({
                     let mut m = BTreeMap::new();
                     let s1 =
                         OperatorSessionSummary::from_session(&sample_session("a", "k")).unwrap();
@@ -1223,11 +1223,11 @@ mod tests {
                     m.insert("b".into(), s2);
                     m.insert("c".into(), s3);
                     m
-                }),
-                operator_watch_status: RwLock::new(OperatorWatchStatus::Watching),
+                })),
+                operator_watch_status: Arc::new(RwLock::new(OperatorWatchStatus::Watching)),
                 notify_tx: tx,
                 token: "t".into(),
-            });
+            };
 
             let resp = list_operator_sessions(axum::extract::State(state)).await.0;
             assert_eq!(resp.sessions.len(), 3);

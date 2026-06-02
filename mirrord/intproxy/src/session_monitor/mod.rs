@@ -1,5 +1,10 @@
+use std::collections::HashSet;
+
 use serde::Serialize;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
+
+#[cfg(unix)]
+pub mod api;
 
 /// Wrapper around `Vec<String>` that redacts its [`Debug`] output to avoid leaking environment
 /// variable names into logs, while still serializing normally for the session monitor API.
@@ -80,5 +85,11 @@ impl MonitorTx {
     }
 }
 
-#[cfg(unix)]
-pub mod api;
+pub type TempChaosRuleType = serde_json::Value;
+pub type TempChaosRules = HashSet<TempChaosRuleType>;
+
+#[derive(Clone, Default)]
+pub struct ChaosWatcherTx(pub watch::Sender<TempChaosRules>);
+
+#[derive(Clone)]
+pub struct ChaosWatcherRx(pub watch::Receiver<TempChaosRules>);

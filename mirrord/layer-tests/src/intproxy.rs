@@ -67,6 +67,7 @@ impl TestIntProxy {
                 Duration::from_secs(60),
                 &experimental_config,
                 mirrord_intproxy::session_monitor::MonitorTx::disabled(),
+                todo!("I'm still too cool to care about test code"),
             );
             intproxy
                 .run(Duration::from_secs(15), Duration::from_secs(5))

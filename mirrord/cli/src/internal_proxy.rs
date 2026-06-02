@@ -31,7 +31,7 @@ use mirrord_config::{
 use mirrord_intproxy::{
     IntProxy,
     agent_conn::{AgentConnectInfo, AgentConnection},
-    session_monitor::MonitorTx,
+    session_monitor::{ChaosWatcherRx, MonitorTx},
 };
 use mirrord_protocol::{ClientMessage, DaemonMessage, LogLevel, LogMessage};
 #[cfg(unix)]
@@ -116,81 +116,84 @@ fn print_addr(listener: &TcpListener) -> io::Result<()> {
 
 /// Starts the session monitor API server if enabled and on Unix, otherwise returns a
 /// disabled [`MonitorTx`].
-async fn start_session_monitor(config: &LayerConfig, is_operator: bool) -> MonitorTx {
-    #[cfg(not(unix))]
-    {
-        let _ = (config, is_operator);
-        MonitorTx::disabled()
+async fn start_session_monitor(
+    config: &LayerConfig,
+    is_operator: bool,
+) -> (MonitorTx, ChaosWatcherRx) {
+    use mirrord_intproxy::session_monitor::TempChaosRules;
+    use tokio::sync::watch;
+
+    if !config.api {
+        // return MonitorTx::disabled();
+        panic!("charmy is a nerd");
     }
 
-    #[cfg(unix)]
-    {
-        if !config.api {
-            return MonitorTx::disabled();
-        }
+    let (tx, _rx) =
+        tokio::sync::broadcast::channel::<mirrord_intproxy::session_monitor::MonitorEvent>(256);
+    let api_monitor_rx = tx.subscribe();
+    let proxy_monitor_tx = MonitorTx::from_sender(tx.clone());
+    let api_monitor_tx = MonitorTx::from_sender(tx);
 
-        let (tx, _rx) =
-            tokio::sync::broadcast::channel::<mirrord_intproxy::session_monitor::MonitorEvent>(256);
-        let api_monitor_rx = tx.subscribe();
-        let proxy_monitor_tx = MonitorTx::from_sender(tx.clone());
-        let api_monitor_tx = MonitorTx::from_sender(tx);
+    let (chaos_tx, chaos_rx) = watch::channel::<TempChaosRules>(Default::default());
 
-        let session_id =
-            env::var("MIRRORD_SESSION_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    let session_id =
+        env::var("MIRRORD_SESSION_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
 
-        let target_name = config
-            .target
-            .path
-            .as_ref()
-            .map(|t| t.to_string())
-            .unwrap_or_else(|| "targetless".to_owned());
+    let target_name = config
+        .target
+        .path
+        .as_ref()
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| "targetless".to_owned());
 
-        let namespace = match &config.target.namespace {
-            Some(namespace) => Some(namespace.clone()),
-            None => match kube_client_from_layer_config(config).await {
-                Ok(client) => Some(client.default_namespace().to_owned()),
-                Err(error) => {
-                    tracing::debug!(
-                        ?error,
-                        "Failed to resolve effective namespace from kube client"
-                    );
-                    None
-                }
-            },
-        };
-
-        let config_value = config_as_diff(config);
-
-        let session_info = SessionInfo {
-            session_id: session_id.clone(),
-            key: Some(config.key.as_str().to_owned()),
-            target: target_name,
-            namespace,
-            started_at: humantime::format_rfc3339(std::time::SystemTime::now()).to_string(),
-            mirrord_version: env!("CARGO_PKG_VERSION").to_owned(),
-            is_operator,
-            processes: Vec::new(),
-            port_subscriptions: Vec::new(),
-            config: config_value,
-        };
-
-        let shutdown = CancellationToken::new();
-
-        tokio::spawn(async move {
-            if let Err(error) = mirrord_intproxy::session_monitor::api::start_api_server(
-                session_info,
-                api_monitor_tx,
-                api_monitor_rx,
-                shutdown,
-            )
-            .await
-            {
-                tracing::warn!(%error, "Session monitor API server failed");
+    let namespace = match &config.target.namespace {
+        Some(namespace) => Some(namespace.clone()),
+        None => match kube_client_from_layer_config(config).await {
+            Ok(client) => Some(client.default_namespace().to_owned()),
+            Err(error) => {
+                tracing::debug!(
+                    ?error,
+                    "Failed to resolve effective namespace from kube client"
+                );
+                None
             }
-        });
+        },
+    };
 
-        proxy_monitor_tx
-    }
+    let config_value = config_as_diff(config);
+
+    let session_info = SessionInfo {
+        session_id: session_id.clone(),
+        key: Some(config.key.as_str().to_owned()),
+        target: target_name,
+        namespace,
+        started_at: humantime::format_rfc3339(std::time::SystemTime::now()).to_string(),
+        mirrord_version: env!("CARGO_PKG_VERSION").to_owned(),
+        is_operator,
+        processes: Vec::new(),
+        port_subscriptions: Vec::new(),
+        config: config_value,
+    };
+
+    let shutdown = CancellationToken::new();
+
+    tokio::spawn(async move {
+        use mirrord_intproxy::session_monitor::ChaosWatcherTx;
+
+        if let Err(error) = mirrord_intproxy::session_monitor::api::start_api_server(
+            session_info,
+            api_monitor_tx,
+            api_monitor_rx,
+            shutdown,
+            ChaosWatcherTx(chaos_tx),
+        )
+        .await
+        {
+            tracing::warn!(%error, "Session monitor API server failed");
+        }
+    });
+
+    (proxy_monitor_tx, ChaosWatcherRx(chaos_rx))
 }
 
 /// Main entry point for the internal proxy.
@@ -295,7 +298,7 @@ pub(crate) async fn proxy(
     let process_logging_interval =
         Duration::from_secs(config.internal_proxy.process_logging_interval);
 
-    let monitor_tx = start_session_monitor(&config, is_operator).await;
+    let (monitor_tx, chaos_rx) = start_session_monitor(&config, is_operator).await;
 
     IntProxy::new_with_connection(
         agent_conn,
@@ -311,6 +314,7 @@ pub(crate) async fn proxy(
         process_logging_interval,
         &config.experimental,
         monitor_tx,
+        chaos_rx,
     )
     .run(first_connection_timeout, consecutive_connection_timeout)
     .await

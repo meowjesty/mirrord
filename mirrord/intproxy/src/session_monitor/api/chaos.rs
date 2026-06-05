@@ -1,11 +1,14 @@
+use anyhow::Context;
 use axum::{
     Json, Router,
     extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{post, put},
 };
 use serde_json::Value;
 
-use crate::session_monitor::api::AppState;
+use crate::session_monitor::{ChaosRuleJsonThingy, TempChaosRules, api::AppState};
 
 /*
 
@@ -45,40 +48,70 @@ pub(super) fn chaos_router() -> Router<AppState> {
         )
 }
 
-async fn post_create_rule(State(state): State<AppState>, Json(new_rule): Json<Value>) -> () {
+#[derive(Debug)]
+struct ApiError(anyhow::Error);
+
+impl<E> From<E> for ApiError
+where
+    E: Into<anyhow::Error>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Something went wrong: {}", self.0),
+        )
+            .into_response()
+    }
+}
+
+type ChaosResult<T> = Result<T, ApiError>;
+
+async fn post_create_rule(
+    State(state): State<AppState>,
+    Json(new_rule): Json<ChaosRuleJsonThingy>,
+) -> ChaosResult<()> {
     tracing::info!(?new_rule);
-    state.chaos_tx.0.send_modify(|current_rules| {
-        current_rules.insert(new_rule);
-    });
+    state.chaos_tx.create_rule(new_rule);
+
+    Ok(())
 }
 
 async fn get_list_active_rules_for_session(
     Path(session_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    State(state): State<AppState>,
+) -> ChaosResult<Json<TempChaosRules>> {
+    Ok(Json(state.chaos_tx.list_active_rules_for_session()))
 }
 
 async fn delete_clear_session_rules(
     Path(session_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    State(state): State<AppState>,
+) -> ChaosResult<()> {
+    Ok(state.chaos_tx.clear_session_rules())
 }
 
 async fn put_update_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> ChaosResult<()> {
+    Ok(state.chaos_tx.update_rule(rule_id))
 }
+
 async fn delete_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> ChaosResult<()> {
+    Ok(state.chaos_tx.delete_rule(rule_id))
 }
+
 async fn get_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> ChaosResult<Json<ChaosRuleJsonThingy>> {
+    Ok(Json(state.chaos_tx.get_rule(rule_id).context("not found")?))
 }

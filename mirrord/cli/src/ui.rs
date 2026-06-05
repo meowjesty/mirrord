@@ -857,7 +857,7 @@ fn build_router(state: AppState) -> Router {
     let authenticated_routes = Router::new()
         .nest("/api", api_routes)
         .route("/ws", get(ws_handler))
-        .nest("/chaos", chaos_router())
+        .nest("/chaos", chaos_router(state.clone()))
         .fallback(static_handler)
         .layer(middleware::from_fn_with_state(state.clone(), token_auth));
 

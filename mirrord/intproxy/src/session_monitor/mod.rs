@@ -1,7 +1,18 @@
-use std::collections::HashSet;
+use std::{
+    borrow::Borrow,
+    collections::HashSet,
+    hash::Hasher,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+};
 
-use serde::Serialize;
-use tokio::sync::{broadcast, watch};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
+use tokio::sync::{
+    broadcast,
+    watch::{self, error::SendError},
+};
 
 #[cfg(unix)]
 pub mod api;
@@ -85,13 +96,105 @@ impl MonitorTx {
     }
 }
 
-pub type TempChaosRuleType = serde_json::Value;
+pub type TempChaosRuleType = ChaosRuleJsonThingy;
 pub type TempChaosRules = HashSet<TempChaosRuleType>;
+
+#[derive(Clone, Debug)]
+pub struct ChaosRuleJsonThingy {
+    kind: ChaosRuleKindThingy,
+    pub hit_count: Arc<AtomicU32>,
+}
+
+impl PartialEq for ChaosRuleJsonThingy {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+impl Eq for ChaosRuleJsonThingy {}
+
+impl core::hash::Hash for ChaosRuleJsonThingy {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kind.hash(state);
+    }
+}
+
+impl Borrow<ChaosRuleKindThingy> for ChaosRuleJsonThingy {
+    fn borrow(&self) -> &ChaosRuleKindThingy {
+        &self.kind
+    }
+}
+
+impl Serialize for ChaosRuleJsonThingy {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("ChaosRuleJsonThingy", 2)?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("hit_count", &self.hit_count.load(Ordering::Relaxed))?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ChaosRuleJsonThingy {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct TempType {
+            kind: ChaosRuleKindThingy,
+            #[serde(default)]
+            hit_count: u32,
+        }
+
+        let TempType { kind, hit_count } = TempType::deserialize(deserializer)?;
+
+        Ok(Self {
+            kind,
+            hit_count: Arc::new(AtomicU32::new(hit_count)),
+        })
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct ChaosWatcherTx(pub watch::Sender<TempChaosRules>);
 
-pub enum ChaosRule {
+impl ChaosWatcherTx {
+    fn list_active_rules_for_session(&self) -> TempChaosRules {
+        self.0.borrow().clone()
+    }
+
+    fn create_rule(&self, new_rule: ChaosRuleJsonThingy) {
+        self.0.send_modify(|current_rules| {
+            current_rules.insert(new_rule);
+        });
+    }
+
+    fn clear_session_rules(&self) {
+        self.0.send_replace(Default::default());
+    }
+
+    fn update_rule(&self, rule_id: String) {
+        self.0.send_modify(|current_rules| {
+            current_rules.replace(ChaosRuleJsonThingy {
+                kind: ChaosRuleKindThingy::TcpOutgoingConnect,
+                hit_count: Default::default(),
+            });
+        });
+    }
+
+    fn delete_rule(&self, rule_id: String) {
+        self.0.send_modify(|current_rules| {
+            current_rules.remove(&ChaosRuleKindThingy::TcpOutgoingConnect);
+        });
+    }
+
+    fn get_rule(&self, rule_id: String) -> Option<ChaosRuleJsonThingy> {
+        self.0
+            .borrow()
+            .get(&ChaosRuleKindThingy::TcpOutgoingConnect)
+            .cloned()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+pub enum ChaosRuleKindThingy {
     TcpOutgoingConnect,
 }
 
@@ -99,15 +202,11 @@ pub enum ChaosRule {
 pub struct ChaosWatcherRx(pub watch::Receiver<TempChaosRules>);
 
 impl ChaosWatcherRx {
-    pub fn get_rule(&self, rule: ChaosRule) -> Option<TempChaosRuleType> {
+    pub fn get_rule(&self, rule: ChaosRuleKindThingy) -> Option<TempChaosRuleType> {
         let stored_rules = self.0.borrow();
         stored_rules
             .iter()
-            .find(|r| {
-                r.get("connect_to_google")
-                    .and_then(serde_json::Value::as_bool)
-                    == Some(true)
-            })
+            .find(|r| matches!(&r.kind, rule))
             .cloned()
     }
 }

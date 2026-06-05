@@ -1,11 +1,14 @@
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use axum::{
-    Json, Router,
-    extract::{Path, State},
+    Extension, Json, Router,
+    extract::{Path, Request, State},
     http::{self, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{post, put},
 };
+use mirrord_intproxy::session_monitor::{ChaosRuleJsonThingy, TempChaosRuleType};
+use reqwest::Client;
 use serde_json::Value;
 
 use crate::ui::AppState;
@@ -24,6 +27,8 @@ DELETE /chaos/rules/{session_id}/{rule_id}: delete rule
 
 DELETE /chaos/rules/{session_id}: clear all rules for session*/
 
+const BASE_INTPROXY_CHAOS_ROUTE: &str = "http://localhost/chaos/rules";
+
 // TODO(alex): Ok, so this works sort of like this:
 // Some random runs `mirrord ui`, it starts up the axum server (let's say the address is
 // `ui:localhost/chaos`), and it's also running an axum server in the intproxy (address
@@ -36,7 +41,7 @@ DELETE /chaos/rules/{session_id}: clear all rules for session*/
 //
 // This `Client` is used to send a reqwest (lol) to `monitor:localhost/chaos/1234`, and in there ...
 // (go to the file `chaos.rs` in `/intproxy`).
-pub(super) fn chaos_router() -> Router<AppState> {
+pub(super) fn chaos_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/rules/{session_id}",
@@ -45,9 +50,32 @@ pub(super) fn chaos_router() -> Router<AppState> {
                 .get(get_list_active_rules_for_session),
         )
         .route(
-            "/{session_id}/{rule_id}",
+            "/rules/{session_id}/{rule_id}",
             put(put_update_rule).delete(delete_rule).get(get_rule),
         )
+        .route_layer(middleware::from_fn_with_state(
+            state,
+            get_session_client_middleware,
+        ))
+}
+
+async fn get_session_client_middleware(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    mut request: Request,
+    next: Next,
+) -> ChaosResult<Response> {
+    let sessions = state.sessions.read().await;
+
+    println!("{session_id} !!!");
+
+    match sessions.get(&session_id) {
+        Some(session) => {
+            request.extensions_mut().insert(session.client.clone());
+            Ok(next.run(request).await)
+        }
+        None => Err(anyhow!("lol"))?,
+    }
 }
 
 #[derive(Debug)]
@@ -75,55 +103,90 @@ type ChaosResult<T> = Result<T, ApiError>;
 
 async fn post_create_rule(
     Path(session_id): Path<String>,
-    State(state): State<AppState>,
+    Extension(client): Extension<Client>,
     Json(new_rule): Json<Value>,
 ) -> ChaosResult<()> {
-    let sessions = state.sessions.read().await;
-
-    println!("{session_id} !!! {new_rule:?}");
-
-    match sessions.get(&session_id) {
-        Some(session) => {
-            session
-                .client
-                .post(format!("http://localhost/chaos/rules/{session_id}"))
-                .json(&new_rule)
-                .send()
-                .await?;
-        }
-        None => todo!(),
-    }
+    client
+        .post(format!("{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}"))
+        .json(&new_rule)
+        .send()
+        .await?;
 
     Ok(())
 }
 
 async fn get_list_active_rules_for_session(
     Path(session_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Extension(client): Extension<Client>,
+) -> ChaosResult<Json<Vec<ChaosRuleJsonThingy>>> {
+    let response = client
+        .get(format!("{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}"))
+        .send()
+        .await?
+        .json::<Vec<ChaosRuleJsonThingy>>()
+        .await?;
+
+    println!("{response:?} yay response");
+
+    Ok(Json(response))
 }
 
 async fn delete_clear_session_rules(
     Path(session_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Extension(client): Extension<Client>,
+) -> ChaosResult<()> {
+    client
+        .delete(format!("{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}"))
+        .send()
+        .await?;
+
+    Ok(())
 }
 
 async fn put_update_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    Extension(client): Extension<Client>,
+    Json(updated_rule): Json<Value>,
+) -> ChaosResult<()> {
+    client
+        .post(format!(
+            "{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}/{rule_id}"
+        ))
+        .json(&updated_rule)
+        .send()
+        .await?;
+
+    Ok(())
 }
+
 async fn delete_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    Extension(client): Extension<Client>,
+) -> ChaosResult<()> {
+    client
+        .delete(format!(
+            "{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}/{rule_id}"
+        ))
+        .send()
+        .await?;
+
+    Ok(())
 }
+
 async fn get_rule(
-    Path(session_id): Path<String>,
-    Path(rule_id): Path<String>,
-    State(_): State<AppState>,
-) -> () {
+    Path((session_id, rule_id)): Path<(String, String)>,
+    Extension(client): Extension<Client>,
+) -> ChaosResult<Json<ChaosRuleJsonThingy>> {
+    let response = client
+        .get(format!(
+            "{BASE_INTPROXY_CHAOS_ROUTE}/{session_id}/{rule_id}"
+        ))
+        .send()
+        .await?
+        .json::<ChaosRuleJsonThingy>()
+        .await?;
+
+    println!("{response:?} yay response");
+
+    Ok(Json(response))
 }
